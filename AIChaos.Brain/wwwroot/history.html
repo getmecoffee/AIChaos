@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Chaos - History</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎮 AI CHAOS CONTROL</h1>
+            <p>Control GMod through AI-powered chat commands</p>
+        </div>
+        
+        <div class="nav">
+            <a href="/" class="nav-link">⚡ Control Panel</a>
+            <a href="/setup" class="nav-link">🔧 Setup</a>
+            <a href="/history" class="nav-link active">📜 History</a>
+        </div>
+        
+        <!-- Login Screen -->
+        <div id="loginScreen" class="login-container">
+            <div class="card">
+                <h2>🔒 Admin Access Required</h2>
+                <div id="loginAlert"></div>
+                
+                <div id="loginForm">
+                    <div class="form-group">
+                        <label>Password</label>
+                        <input type="password" id="loginPassword" placeholder="Enter admin password" onkeydown="if(event.key==='Enter')login()">
+                    </div>
+                    <button onclick="login()">🔓 Login</button>
+                </div>
+                
+                <p id="notConfigured" class="hidden" style="color: var(--warning); text-align: center;">
+                    Admin password not configured. <a href="/setup" style="color: var(--info);">Set it up first</a>.
+                </p>
+            </div>
+        </div>
+        
+        <!-- History Content (hidden until logged in) -->
+        <div id="historyContent" class="hidden">
+            <div class="card">
+                <h2>📜 Command History</h2>
+                
+                <div class="form-group checkbox-group">
+                    <input type="checkbox" id="includeHistoryInAi" onchange="updatePreferences()">
+                    <label for="includeHistoryInAi" style="margin: 0;">Feed history to AI context</label>
+                </div>
+                
+                <div class="btn-group" style="margin-bottom: 20px;">
+                    <button onclick="loadHistory()" class="btn-secondary">🔄 Refresh</button>
+                    <button onclick="clearHistory()" class="btn-danger">🗑️ Clear All</button>
+                </div>
+                
+                <div id="historyList">
+                    <div class="empty-state">Loading history...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let isLoggedIn = false;
+        let adminPassword = '';
+        let commandHistory = [];
+        
+        // Check admin status on load
+        async function checkAdminStatus() {
+            try {
+                const response = await fetch('/api/setup/admin/status');
+                const data = await response.json();
+                
+                if (!data.isConfigured) {
+                    document.getElementById('loginForm').classList.add('hidden');
+                    document.getElementById('notConfigured').classList.remove('hidden');
+                }
+            } catch (err) {
+                console.error('Failed to check admin status:', err);
+            }
+        }
+        
+        async function login() {
+            const password = document.getElementById('loginPassword').value;
+            
+            try {
+                const response = await fetch('/api/setup/admin/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password })
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    adminPassword = password;
+                    showHistoryContent();
+                } else {
+                    showLoginAlert(data.message || 'Invalid password', 'error');
+                }
+            } catch (err) {
+                showLoginAlert('Network error', 'error');
+            }
+        }
+        
+        function showLoginAlert(message, type) {
+            const container = document.getElementById('loginAlert');
+            container.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
+        }
+        
+        function showHistoryContent() {
+            isLoggedIn = true;
+            document.getElementById('loginScreen').classList.add('hidden');
+            document.getElementById('historyContent').classList.remove('hidden');
+            loadHistory();
+        }
+        
+        async function loadHistory() {
+            try {
+                const response = await fetch('/api/history');
+                const data = await response.json();
+                
+                commandHistory = data.history;
+                document.getElementById('includeHistoryInAi').checked = data.preferences.includeHistoryInAi;
+                
+                renderHistory();
+            } catch (err) {
+                console.error('Failed to load history:', err);
+            }
+        }
+        
+        function renderHistory() {
+            const container = document.getElementById('historyList');
+            
+            if (commandHistory.length === 0) {
+                container.innerHTML = '<div class="empty-state">No commands in history yet.</div>';
+                return;
+            }
+            
+            container.innerHTML = [...commandHistory].reverse().map(cmd => `
+                <div class="history-item" style="flex-direction: column; align-items: stretch;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <div class="history-time">#${cmd.id} - ${new Date(cmd.timestamp).toLocaleString()}</div>
+                            <div class="history-prompt" style="margin-top: 5px;">${escapeHtml(cmd.userPrompt)}</div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span class="history-source ${cmd.source}">${cmd.source}</span>
+                            <div class="history-actions">
+                                <button onclick="repeatCommand(${cmd.id})" class="btn-info btn-small">🔁 Repeat</button>
+                                <button onclick="undoCommand(${cmd.id})" class="btn-warning btn-small">↩ Undo</button>
+                                <button onclick="forceUndo(${cmd.id})" class="btn-danger btn-small">⚠ Force</button>
+                                <button onclick="toggleCode(${cmd.id})" class="btn-secondary btn-small">👁 Code</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="code-${cmd.id}" class="hidden" style="margin-top: 10px;">
+                        <div class="code-block">
+                            <strong>Execution Code:</strong>
+${escapeHtml(cmd.executionCode)}
+
+<strong>Undo Code:</strong>
+${escapeHtml(cmd.undoCode)}
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        function toggleCode(id) {
+            const codeDiv = document.getElementById(`code-${id}`);
+            codeDiv.classList.toggle('hidden');
+        }
+        
+        async function repeatCommand(id) {
+            try {
+                const response = await fetch('/api/repeat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ commandId: id })
+                });
+                const data = await response.json();
+                alert(data.status === 'success' ? 'Command repeated!' : data.message);
+            } catch (err) {
+                alert('Network error');
+            }
+        }
+        
+        async function undoCommand(id) {
+            try {
+                const response = await fetch('/api/undo', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ commandId: id })
+                });
+                const data = await response.json();
+                alert(data.status === 'success' ? 'Undo command queued!' : data.message);
+            } catch (err) {
+                alert('Network error');
+            }
+        }
+        
+        async function forceUndo(id) {
+            try {
+                const response = await fetch('/api/force_undo', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ commandId: id })
+                });
+                const data = await response.json();
+                alert(data.status === 'success' ? 'Force undo queued!' : data.message);
+            } catch (err) {
+                alert('Network error');
+            }
+        }
+        
+        async function updatePreferences() {
+            const includeHistory = document.getElementById('includeHistoryInAi').checked;
+            
+            try {
+                await fetch('/api/preferences', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ includeHistoryInAi: includeHistory })
+                });
+            } catch (err) {
+                console.error('Failed to update preferences:', err);
+            }
+        }
+        
+        async function clearHistory() {
+            if (!confirm('Are you sure you want to clear all command history?')) return;
+            
+            try {
+                await fetch('/api/clear_history', { method: 'POST' });
+                loadHistory();
+            } catch (err) {
+                alert('Failed to clear history');
+            }
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text || '';
+            return div.innerHTML;
+        }
+        
+        // Initialize
+        checkAdminStatus();
+    </script>
+</body>
+</html>

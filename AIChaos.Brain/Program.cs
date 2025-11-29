@@ -18,6 +18,7 @@ builder.Services.AddSingleton<CommandQueueService>();
 builder.Services.AddSingleton<AiCodeGeneratorService>();
 builder.Services.AddSingleton<TwitchService>();
 builder.Services.AddSingleton<YouTubeService>();
+builder.Services.AddSingleton<TunnelService>();
 
 // Configure CORS for local development
 builder.Services.AddCors(options =>
@@ -41,16 +42,28 @@ if (app.Environment.IsDevelopment())
 app.UseCors();
 app.UseDefaultFiles();
 app.UseStaticFiles();
-app.MapControllers();
 
-// Fallback to index.html for SPA routing
-app.MapFallbackToFile("index.html");
+// Map routes for separate pages
+app.MapGet("/setup", async context =>
+{
+    context.Response.ContentType = "text/html";
+    await context.Response.SendFileAsync(Path.Combine(app.Environment.WebRootPath, "setup.html"));
+});
+
+app.MapGet("/history", async context =>
+{
+    context.Response.ContentType = "text/html";
+    await context.Response.SendFileAsync(Path.Combine(app.Environment.WebRootPath, "history.html"));
+});
+
+app.MapControllers();
 
 Console.WriteLine("========================================");
 Console.WriteLine("  AI Chaos Brain - C# Edition");
 Console.WriteLine("========================================");
-Console.WriteLine($"  Open http://localhost:5000/ in your browser");
-Console.WriteLine("  Setup: http://localhost:5000/#/setup");
+Console.WriteLine($"  Control Panel: http://localhost:5000/");
+Console.WriteLine("  Setup: http://localhost:5000/setup");
+Console.WriteLine("  History: http://localhost:5000/history");
 Console.WriteLine("========================================");
 
 app.Run("http://0.0.0.0:5000");

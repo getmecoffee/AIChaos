@@ -16,6 +16,7 @@ public class SetupController : ControllerBase
     private readonly SettingsService _settingsService;
     private readonly TwitchService _twitchService;
     private readonly YouTubeService _youtubeService;
+    private readonly TunnelService _tunnelService;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<SetupController> _logger;
     
@@ -23,15 +24,149 @@ public class SetupController : ControllerBase
         SettingsService settingsService,
         TwitchService twitchService,
         YouTubeService youtubeService,
+        TunnelService tunnelService,
         IHttpClientFactory httpClientFactory,
         ILogger<SetupController> logger)
     {
         _settingsService = settingsService;
         _twitchService = twitchService;
         _youtubeService = youtubeService;
+        _tunnelService = tunnelService;
         _httpClientFactory = httpClientFactory;
         _logger = logger;
     }
+    
+    // ==========================================
+    // ADMIN AUTHENTICATION
+    // ==========================================
+    
+    /// <summary>
+    /// Check if admin is configured and validate password.
+    /// </summary>
+    [HttpPost("admin/login")]
+    public ActionResult AdminLogin([FromBody] AdminLoginRequest request)
+    {
+        if (!_settingsService.IsAdminConfigured)
+        {
+            return Ok(new { status = "not_configured", message = "Admin password not set. Please set one first." });
+        }
+        
+        if (_settingsService.ValidateAdminPassword(request.Password))
+        {
+            return Ok(new { status = "success", message = "Login successful" });
+        }
+        
+        return Unauthorized(new { status = "error", message = "Invalid password" });
+    }
+    
+    /// <summary>
+    /// Set or update admin password.
+    /// </summary>
+    [HttpPost("admin/password")]
+    public ActionResult SetAdminPassword([FromBody] SetPasswordRequest request)
+    {
+        // If password is already set, require current password
+        if (_settingsService.IsAdminConfigured)
+        {
+            if (string.IsNullOrEmpty(request.CurrentPassword) || 
+                !_settingsService.ValidateAdminPassword(request.CurrentPassword))
+            {
+                return Unauthorized(new { status = "error", message = "Current password is incorrect" });
+            }
+        }
+        
+        if (string.IsNullOrEmpty(request.NewPassword) || request.NewPassword.Length < 4)
+        {
+            return BadRequest(new { status = "error", message = "Password must be at least 4 characters" });
+        }
+        
+        _settingsService.SetAdminPassword(request.NewPassword);
+        _logger.LogInformation("Admin password updated");
+        
+        return Ok(new { status = "success", message = "Password set successfully" });
+    }
+    
+    /// <summary>
+    /// Check admin configuration status.
+    /// </summary>
+    [HttpGet("admin/status")]
+    public ActionResult GetAdminStatus()
+    {
+        return Ok(new { 
+            isConfigured = _settingsService.IsAdminConfigured 
+        });
+    }
+    
+    // ==========================================
+    // TUNNEL MANAGEMENT
+    // ==========================================
+    
+    /// <summary>
+    /// Get current tunnel status.
+    /// </summary>
+    [HttpGet("tunnel/status")]
+    public ActionResult GetTunnelStatus()
+    {
+        var status = _tunnelService.GetStatus();
+        return Ok(status);
+    }
+    
+    /// <summary>
+    /// Start ngrok tunnel.
+    /// </summary>
+    [HttpPost("tunnel/ngrok/start")]
+    public async Task<ActionResult> StartNgrok([FromBody] NgrokStartRequest? request = null)
+    {
+        var (success, url, error) = await _tunnelService.StartNgrokAsync(request?.AuthToken);
+        
+        if (success)
+        {
+            return Ok(new { 
+                status = "success", 
+                message = "ngrok started", 
+                url,
+                publicIp = _tunnelService.PublicIp
+            });
+        }
+        
+        return BadRequest(new { status = "error", message = error });
+    }
+    
+    /// <summary>
+    /// Start localtunnel.
+    /// </summary>
+    [HttpPost("tunnel/localtunnel/start")]
+    public async Task<ActionResult> StartLocalTunnel()
+    {
+        var (success, url, error) = await _tunnelService.StartLocalTunnelAsync();
+        
+        if (success)
+        {
+            return Ok(new { 
+                status = "success", 
+                message = "localtunnel started", 
+                url,
+                publicIp = _tunnelService.PublicIp,
+                note = "LocalTunnel requires entering your public IP as password on first visit"
+            });
+        }
+        
+        return BadRequest(new { status = "error", message = error });
+    }
+    
+    /// <summary>
+    /// Stop current tunnel.
+    /// </summary>
+    [HttpPost("tunnel/stop")]
+    public ActionResult StopTunnel()
+    {
+        _tunnelService.Stop();
+        return Ok(new { status = "success", message = "Tunnel stopped" });
+    }
+    
+    // ==========================================
+    // STATUS
+    // ==========================================
     
     /// <summary>
     /// Gets the current setup status.
@@ -40,10 +175,13 @@ public class SetupController : ControllerBase
     public ActionResult<SetupStatus> GetStatus()
     {
         var settings = _settingsService.Settings;
+        var tunnelStatus = _tunnelService.GetStatus();
         
         return Ok(new SetupStatus
         {
             OpenRouterConfigured = _settingsService.IsOpenRouterConfigured,
+            AdminConfigured = _settingsService.IsAdminConfigured,
+            CurrentModel = settings.OpenRouter.Model,
             Twitch = new TwitchAuthState
             {
                 IsAuthenticated = _settingsService.IsTwitchConfigured,
@@ -55,7 +193,40 @@ public class SetupController : ControllerBase
                 IsAuthenticated = _settingsService.IsYouTubeConfigured,
                 VideoId = settings.YouTube.VideoId,
                 IsListening = _youtubeService.IsListening
+            },
+            Tunnel = new TunnelState
+            {
+                IsRunning = tunnelStatus.IsRunning,
+                Type = tunnelStatus.Type.ToString(),
+                Url = tunnelStatus.Url,
+                PublicIp = tunnelStatus.PublicIp
             }
+        });
+    }
+    
+    /// <summary>
+    /// Gets available AI models.
+    /// </summary>
+    [HttpGet("models")]
+    public ActionResult GetModels()
+    {
+        var models = new[]
+        {
+            new { id = "anthropic/claude-sonnet-4.5", name = "Claude Sonnet 4.5 (Recommended)", provider = "Anthropic" },
+            new { id = "anthropic/claude-3.5-sonnet", name = "Claude 3.5 Sonnet", provider = "Anthropic" },
+            new { id = "anthropic/claude-3-opus", name = "Claude 3 Opus", provider = "Anthropic" },
+            new { id = "openai/gpt-4o", name = "GPT-4o", provider = "OpenAI" },
+            new { id = "openai/gpt-4-turbo", name = "GPT-4 Turbo", provider = "OpenAI" },
+            new { id = "openai/gpt-4", name = "GPT-4", provider = "OpenAI" },
+            new { id = "google/gemini-pro-1.5", name = "Gemini Pro 1.5", provider = "Google" },
+            new { id = "google/gemini-flash-1.5", name = "Gemini Flash 1.5", provider = "Google" },
+            new { id = "meta-llama/llama-3.1-70b-instruct", name = "Llama 3.1 70B", provider = "Meta" },
+            new { id = "mistralai/mixtral-8x22b-instruct", name = "Mixtral 8x22B", provider = "Mistral" }
+        };
+        
+        return Ok(new { 
+            models, 
+            currentModel = _settingsService.Settings.OpenRouter.Model 
         });
     }
     
@@ -129,12 +300,12 @@ public class SetupController : ControllerBase
     {
         if (!string.IsNullOrEmpty(error))
         {
-            return Redirect($"/#/setup?error=twitch_denied");
+            return Redirect($"/setup?error=twitch_denied");
         }
         
         if (string.IsNullOrEmpty(code))
         {
-            return Redirect($"/#/setup?error=twitch_no_code");
+            return Redirect($"/setup?error=twitch_no_code");
         }
         
         var settings = _settingsService.Settings.Twitch;
@@ -158,7 +329,7 @@ public class SetupController : ControllerBase
             {
                 var errorContent = await tokenResponse.Content.ReadAsStringAsync();
                 _logger.LogError("Twitch token exchange failed: {Error}", errorContent);
-                return Redirect($"/#/setup?error=twitch_token_failed");
+                return Redirect($"/setup?error=twitch_token_failed");
             }
             
             var tokenJson = await tokenResponse.Content.ReadAsStringAsync();
@@ -193,12 +364,12 @@ public class SetupController : ControllerBase
             _settingsService.UpdateTwitch(settings);
             _logger.LogInformation("Twitch OAuth successful");
             
-            return Redirect("/#/setup?success=twitch");
+            return Redirect("/setup?success=twitch");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Twitch OAuth callback error");
-            return Redirect($"/#/setup?error=twitch_exception");
+            return Redirect($"/setup?error=twitch_exception");
         }
     }
     
@@ -288,12 +459,12 @@ public class SetupController : ControllerBase
     {
         if (!string.IsNullOrEmpty(error))
         {
-            return Redirect($"/#/setup?error=youtube_denied");
+            return Redirect($"/setup?error=youtube_denied");
         }
         
         if (string.IsNullOrEmpty(code))
         {
-            return Redirect($"/#/setup?error=youtube_no_code");
+            return Redirect($"/setup?error=youtube_no_code");
         }
         
         var settings = _settingsService.Settings.YouTube;
@@ -317,7 +488,7 @@ public class SetupController : ControllerBase
             {
                 var errorContent = await tokenResponse.Content.ReadAsStringAsync();
                 _logger.LogError("YouTube token exchange failed: {Error}", errorContent);
-                return Redirect($"/#/setup?error=youtube_token_failed");
+                return Redirect($"/setup?error=youtube_token_failed");
             }
             
             var tokenJson = await tokenResponse.Content.ReadAsStringAsync();
@@ -331,12 +502,12 @@ public class SetupController : ControllerBase
             _settingsService.UpdateYouTube(settings);
             _logger.LogInformation("YouTube OAuth successful");
             
-            return Redirect("/#/setup?success=youtube");
+            return Redirect("/setup?success=youtube");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "YouTube OAuth callback error");
-            return Redirect($"/#/setup?error=youtube_exception");
+            return Redirect($"/setup?error=youtube_exception");
         }
     }
     
@@ -366,4 +537,21 @@ public class SetupController : ControllerBase
         _youtubeService.StopListening();
         return Ok(new { status = "success", message = "Stopped listening to YouTube" });
     }
+}
+
+// Request models
+public class AdminLoginRequest
+{
+    public string Password { get; set; } = "";
+}
+
+public class SetPasswordRequest
+{
+    public string? CurrentPassword { get; set; }
+    public string NewPassword { get; set; } = "";
+}
+
+public class NgrokStartRequest
+{
+    public string? AuthToken { get; set; }
 }

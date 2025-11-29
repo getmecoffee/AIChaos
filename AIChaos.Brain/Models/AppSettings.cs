@@ -9,6 +9,8 @@ public class AppSettings
     public TwitchSettings Twitch { get; set; } = new();
     public YouTubeSettings YouTube { get; set; } = new();
     public SafetySettings Safety { get; set; } = new();
+    public AdminSettings Admin { get; set; } = new();
+    public TunnelSettings Tunnel { get; set; } = new();
 }
 
 public class OpenRouterSettings
@@ -51,4 +53,25 @@ public class SafetySettings
     public bool BlockUrls { get; set; } = true;
     public List<string> AllowedDomains { get; set; } = new() { "i.imgur.com", "imgur.com" };
     public List<string> Moderators { get; set; } = new();
+}
+
+public class AdminSettings
+{
+    public string Password { get; set; } = "";
+    public bool IsConfigured => !string.IsNullOrEmpty(Password);
+}
+
+public class TunnelSettings
+{
+    public TunnelType Type { get; set; } = TunnelType.None;
+    public string NgrokAuthToken { get; set; } = "";
+    public string CurrentUrl { get; set; } = "";
+    public bool IsRunning { get; set; } = false;
+}
+
+public enum TunnelType
+{
+    None,
+    Ngrok,
+    LocalTunnel
 }

@@ -126,6 +126,46 @@ public class SettingsService
     }
     
     /// <summary>
+    /// Sets the admin password.
+    /// </summary>
+    public void SetAdminPassword(string password)
+    {
+        lock (_lock)
+        {
+            _settings.Admin.Password = password;
+            SaveSettings();
+        }
+    }
+    
+    /// <summary>
+    /// Validates the admin password.
+    /// </summary>
+    public bool ValidateAdminPassword(string password)
+    {
+        lock (_lock)
+        {
+            // If no password is set, deny access
+            if (!_settings.Admin.IsConfigured)
+            {
+                return false;
+            }
+            return _settings.Admin.Password == password;
+        }
+    }
+    
+    /// <summary>
+    /// Updates tunnel settings.
+    /// </summary>
+    public void UpdateTunnel(TunnelSettings tunnel)
+    {
+        lock (_lock)
+        {
+            _settings.Tunnel = tunnel;
+            SaveSettings();
+        }
+    }
+    
+    /// <summary>
     /// Checks if OpenRouter is configured.
     /// </summary>
     public bool IsOpenRouterConfigured => !string.IsNullOrEmpty(_settings.OpenRouter.ApiKey);
@@ -143,4 +183,9 @@ public class SettingsService
     public bool IsYouTubeConfigured => 
         !string.IsNullOrEmpty(_settings.YouTube.ClientId) && 
         !string.IsNullOrEmpty(_settings.YouTube.AccessToken);
+    
+    /// <summary>
+    /// Checks if admin password is configured.
+    /// </summary>
+    public bool IsAdminConfigured => _settings.Admin.IsConfigured;
 }

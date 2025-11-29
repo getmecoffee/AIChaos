@@ -7,9 +7,11 @@ The C# version of the AI Chaos Brain - a server that receives chaos commands and
 - 🤖 **AI Code Generation** - Uses OpenRouter API to generate Lua code from natural language requests
 - 📺 **Twitch Integration** - OAuth login and chat listener for Twitch commands
 - 🎬 **YouTube Integration** - OAuth login and Super Chat listener for YouTube Live
-- 🎮 **Web Control Panel** - Easy-to-use web interface for sending commands
-- 📜 **Command History** - Track, repeat, and undo previous commands
-- 🔒 **Safety Features** - URL filtering, changelevel blocking, and cooldowns
+- 🎮 **Web Control Panel** - Easy-to-use public interface for sending commands
+- 📜 **Command History** - Track, repeat, and undo previous commands (password protected)
+- 🔧 **Setup Wizard** - Easy configuration with model selection (password protected)
+- 🌐 **Built-in Tunnel Support** - Start ngrok or LocalTunnel directly from the UI
+- 🔒 **Password Protection** - Setup and History pages are protected by admin password
 
 ## Quick Start
 
@@ -17,6 +19,7 @@ The C# version of the AI Chaos Brain - a server that receives chaos commands and
 
 - [.NET 9.0 SDK](https://dotnet.microsoft.com/download) or later
 - An [OpenRouter](https://openrouter.ai/) API key
+- (Optional) ngrok or LocalTunnel for public access
 
 ### Running the Brain
 
@@ -28,18 +31,38 @@ dotnet run
 The server will start on `http://localhost:5000`
 
 Open your browser to:
-- `http://localhost:5000/` - Control Panel
-- `http://localhost:5000/#/setup` - Setup & Configuration
+- `http://localhost:5000/` - Control Panel (Public)
+- `http://localhost:5000/setup` - Setup & Configuration (Password Protected)
+- `http://localhost:5000/history` - Command History (Password Protected)
 
 ## Setup Guide
 
-### 1. OpenRouter API (Required)
+### 1. Set Admin Password
+
+On first visit to `/setup`, you'll be prompted to set an admin password. This protects the Setup and History pages from public access.
+
+### 2. OpenRouter API (Required)
 
 1. Go to [openrouter.ai/keys](https://openrouter.ai/keys)
 2. Create an account and generate an API key
 3. Enter the API key in the Setup page
+4. Choose your preferred AI model
 
-### 2. Twitch Integration (Optional)
+### 3. Tunnel Configuration (For GMod Access)
+
+The Setup page includes built-in tunnel management:
+
+**ngrok:**
+1. (Optional) Get an auth token from [ngrok.com](https://ngrok.com/download)
+2. Click "Start ngrok" in the Setup page
+3. The public URL will be displayed and auto-configured in the Lua file
+
+**LocalTunnel:**
+1. Install: `npm install -g localtunnel`
+2. Click "Start LocalTunnel" in the Setup page
+3. Note: LocalTunnel requires entering your public IP as a password on first visit
+
+### 4. Twitch Integration (Optional)
 
 1. Go to [dev.twitch.tv/console](https://dev.twitch.tv/console)
 2. Create a new application
@@ -48,13 +71,7 @@ Open your browser to:
 5. Click "Login with Twitch" to authenticate
 6. Click "Start Listening" to begin receiving chat commands
 
-#### Twitch Settings
-- **Channel**: Your Twitch channel name
-- **Chat Command**: The command prefix (default: `!chaos`)
-- **Require Bits**: Only process commands with bits
-- **Min Bits**: Minimum bits required
-
-### 3. YouTube Integration (Optional)
+### 5. YouTube Integration (Optional)
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
 2. Create a new project
@@ -65,54 +82,27 @@ Open your browser to:
 7. Click "Login with YouTube" to authenticate
 8. Enter your live stream's Video ID and click "Start Listening"
 
-#### YouTube Settings
-- **Video ID**: The video ID from your live stream URL (e.g., `dQw4w9WgXcQ`)
-- **Min Super Chat**: Minimum Super Chat amount to trigger commands
-- **Allow Regular Chat**: Also process non-donation chat messages
-
 ## GMod Setup
 
-The GMod addon in the `lua/` folder needs to connect to this brain. Make sure:
+The GMod addon in the `lua/` folder needs to connect to this brain. When you start a tunnel, the Lua file is automatically updated with the correct URL.
 
-1. The brain is running and accessible
-2. Update `lua/autorun/ai_chaos_controller.lua` with the correct URL
-3. For public access, use a tunnel service like ngrok or localtunnel
+Manually update `lua/autorun/ai_chaos_controller.lua` if needed.
 
 ## API Endpoints
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/` | GET | Web control panel |
+| `/` | GET | Public control panel |
+| `/setup` | GET | Setup page (password protected) |
+| `/history` | GET | History page (password protected) |
 | `/poll` | POST | GMod polls for commands |
 | `/trigger` | POST | Send a chaos command |
 | `/api/history` | GET | Get command history |
-| `/api/repeat` | POST | Repeat a previous command |
-| `/api/undo` | POST | Undo a command |
-| `/api/force_undo` | POST | AI-generated force undo |
 | `/api/setup/status` | GET | Get setup status |
-| `/api/setup/twitch/auth-url` | GET | Get Twitch OAuth URL |
-| `/api/setup/youtube/auth-url` | GET | Get YouTube OAuth URL |
-
-## Configuration
-
-Settings are stored in `settings.json` (auto-generated on first run).
-
-You can also configure via `appsettings.json`:
-
-```json
-{
-  "AIChaos": {
-    "OpenRouter": {
-      "BaseUrl": "https://openrouter.ai/api/v1",
-      "Model": "anthropic/claude-sonnet-4.5"
-    },
-    "Safety": {
-      "BlockUrls": true,
-      "AllowedDomains": ["i.imgur.com", "imgur.com"]
-    }
-  }
-}
-```
+| `/api/setup/models` | GET | Get available AI models |
+| `/api/setup/tunnel/ngrok/start` | POST | Start ngrok tunnel |
+| `/api/setup/tunnel/localtunnel/start` | POST | Start LocalTunnel |
+| `/api/setup/tunnel/stop` | POST | Stop current tunnel |
 
 ## Development
 
@@ -130,19 +120,6 @@ dotnet run
 dotnet publish -c Release
 ```
 
-## Comparison with Python Version
-
-| Feature | Python | C# |
-|---------|--------|-----|
-| Runtime | Python 3.x | .NET 9.0 |
-| Web Framework | Flask | ASP.NET Core |
-| Twitch Auth | Manual token | OAuth flow |
-| YouTube Auth | Manual token | OAuth flow |
-| Configuration | Text files | JSON + Web UI |
-| Image Scanning | ✅ (EasyOCR, BLIP) | ❌ (not ported) |
-
-The C# version focuses on easy setup with OAuth authentication, while the Python version includes advanced image scanning features.
-
 ## Troubleshooting
 
 ### "Failed to connect to brain"
@@ -158,6 +135,10 @@ The C# version focuses on easy setup with OAuth authentication, while the Python
 - The stream must be actively live
 - Use the video ID from the URL, not the channel ID
 - Make sure you're authenticated with the correct account
+
+### Tunnel not starting
+- ngrok: Make sure ngrok is installed and in PATH
+- LocalTunnel: Make sure Node.js and `localtunnel` are installed (`npm install -g localtunnel`)
 
 ## License
 

@@ -118,11 +118,25 @@ public class YouTubeAuthState
 }
 
 /// <summary>
+/// Tunnel state for ngrok/localtunnel.
+/// </summary>
+public class TunnelState
+{
+    public bool IsRunning { get; set; }
+    public string Type { get; set; } = "None";
+    public string? Url { get; set; }
+    public string? PublicIp { get; set; }
+}
+
+/// <summary>
 /// Setup status response.
 /// </summary>
 public class SetupStatus
 {
     public bool OpenRouterConfigured { get; set; }
+    public bool AdminConfigured { get; set; }
+    public string? CurrentModel { get; set; }
     public TwitchAuthState Twitch { get; set; } = new();
     public YouTubeAuthState YouTube { get; set; } = new();
+    public TunnelState Tunnel { get; set; } = new();
 }
