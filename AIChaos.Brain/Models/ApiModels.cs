@@ -1,0 +1,128 @@
+namespace AIChaos.Brain.Models;
+
+/// <summary>
+/// Represents a command in the queue waiting to be executed by the game.
+/// </summary>
+public class CommandEntry
+{
+    public int Id { get; set; }
+    public DateTime Timestamp { get; set; } = DateTime.UtcNow;
+    public string UserPrompt { get; set; } = "";
+    public string ExecutionCode { get; set; } = "";
+    public string UndoCode { get; set; } = "";
+    public string? ImageContext { get; set; }
+    public string Source { get; set; } = "web"; // web, twitch, youtube
+    public string Author { get; set; } = "anonymous";
+    public CommandStatus Status { get; set; } = CommandStatus.Pending;
+}
+
+public enum CommandStatus
+{
+    Pending,
+    Queued,
+    Executed,
+    Undone,
+    Failed
+}
+
+/// <summary>
+/// Request to trigger a chaos command.
+/// </summary>
+public class TriggerRequest
+{
+    public string Prompt { get; set; } = "";
+    public string? Source { get; set; }
+    public string? Author { get; set; }
+}
+
+/// <summary>
+/// Response from triggering a chaos command.
+/// </summary>
+public class TriggerResponse
+{
+    public string Status { get; set; } = "";
+    public string? Message { get; set; }
+    public string? CodePreview { get; set; }
+    public bool HasUndo { get; set; }
+    public int? CommandId { get; set; }
+    public string? ContextFound { get; set; }
+    public bool WasBlocked { get; set; }
+}
+
+/// <summary>
+/// Response from polling for commands.
+/// </summary>
+public class PollResponse
+{
+    public bool HasCode { get; set; }
+    public string? Code { get; set; }
+}
+
+/// <summary>
+/// Request to repeat or undo a command.
+/// </summary>
+public class CommandIdRequest
+{
+    public int CommandId { get; set; }
+}
+
+/// <summary>
+/// Generic API response.
+/// </summary>
+public class ApiResponse
+{
+    public string Status { get; set; } = "";
+    public string? Message { get; set; }
+    public int? CommandId { get; set; }
+}
+
+/// <summary>
+/// History API response with command list and preferences.
+/// </summary>
+public class HistoryResponse
+{
+    public List<CommandEntry> History { get; set; } = new();
+    public UserPreferences Preferences { get; set; } = new();
+}
+
+/// <summary>
+/// User preferences for the application.
+/// </summary>
+public class UserPreferences
+{
+    public bool IncludeHistoryInAi { get; set; } = true;
+    public bool HistoryEnabled { get; set; } = true;
+    public int MaxHistoryLength { get; set; } = 50;
+}
+
+/// <summary>
+/// OAuth state for Twitch authentication.
+/// </summary>
+public class TwitchAuthState
+{
+    public bool IsAuthenticated { get; set; }
+    public string? Username { get; set; }
+    public string? Channel { get; set; }
+    public bool IsListening { get; set; }
+}
+
+/// <summary>
+/// OAuth state for YouTube authentication.
+/// </summary>
+public class YouTubeAuthState
+{
+    public bool IsAuthenticated { get; set; }
+    public string? ChannelName { get; set; }
+    public string? VideoId { get; set; }
+    public bool IsListening { get; set; }
+}
+
+/// <summary>
+/// Setup status response.
+/// </summary>
+public class SetupStatus
+{
+    public bool OpenRouterConfigured { get; set; }
+    public TwitchAuthState Twitch { get; set; } = new();
+    public YouTubeAuthState YouTube { get; set; } = new();
+}
