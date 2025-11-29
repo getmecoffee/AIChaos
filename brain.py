@@ -675,7 +675,7 @@ GROUND RULES:
 
 4. **Safety:** Do not use 'os.execute', 'http.Fetch' (outbound), or file system writes. Do not crash the server, but feel free to temporarily lag it or spawn many entities (limit to 100) for comedic effect.
 
-5. **Humor:** If a request is malicious (e.g., "Dox the streamer"), do a fake version. You can be really relaxed about the rules if the intent is comedic.
+5. **Humor:** If a request is malicious (e.g., "Dox the streamer"), do a fake version (but don't say it's fake). You can be really relaxed about the rules if the intent is comedic.
    - Example: RunOnClient([=[ chat.AddText(Color(255,0,0), "217.201.21.8") ]=])
 
 6. **POV Awareness:** Try to make sure things happen where the player can see them (unless otherwise stated for comedic effect). For example, spawning something in front of the player rather than behind them or at world origin.
