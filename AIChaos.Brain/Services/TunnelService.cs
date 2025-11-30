@@ -341,30 +341,87 @@ public partial class TunnelService : IDisposable
     {
         if (_tunnelProcess == null) return null;
         
-        var timeout = DateTime.UtcNow.AddSeconds(30);
+        var output = new System.Text.StringBuilder();
+        var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         
-        // Read from stderr as bore outputs there
-        while (DateTime.UtcNow < timeout)
+        try
         {
-            if (_tunnelProcess.HasExited)
-            {
-                return null;
-            }
+            // Read from both stdout and stderr concurrently with timeout
+            // Bore can output to either stream depending on version
+            var stdoutTask = ReadStreamWithTimeoutAsync(_tunnelProcess.StandardOutput, output, cts.Token);
+            var stderrTask = ReadStreamWithTimeoutAsync(_tunnelProcess.StandardError, output, cts.Token);
             
-            var line = await _tunnelProcess.StandardError.ReadLineAsync();
-            if (!string.IsNullOrEmpty(line))
+            // Wait for either task to find a URL or timeout
+            while (!cts.Token.IsCancellationRequested)
             {
-                _logger.LogDebug("bore output: {Line}", line);
-                // Bore outputs something like: "listening at bore.pub:12345"
-                var match = BorePortRegex().Match(line);
-                if (match.Success)
+                if (_tunnelProcess.HasExited)
                 {
-                    var port = match.Groups[1].Value;
-                    return $"http://bore.pub:{port}";
+                    _logger.LogWarning("bore process exited prematurely");
+                    break;
+                }
+                
+                // Check current output for bore URL
+                var currentOutput = output.ToString();
+                if (!string.IsNullOrEmpty(currentOutput))
+                {
+                    _logger.LogDebug("bore output: {Output}", currentOutput);
+                    var match = BorePortRegex().Match(currentOutput);
+                    if (match.Success)
+                    {
+                        var port = match.Groups[1].Value;
+                        cts.Cancel(); // Stop reading
+                        return $"http://bore.pub:{port}";
+                    }
+                }
+                
+                await Task.Delay(500, cts.Token);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogWarning("bore URL detection timed out. Output received: {Output}", output.ToString());
+        }
+        
+        return null;
+    }
+    
+    private async Task ReadStreamWithTimeoutAsync(StreamReader reader, System.Text.StringBuilder output, CancellationToken ct)
+    {
+        var buffer = new char[1024];
+        try
+        {
+            while (!ct.IsCancellationRequested)
+            {
+                // Use a small buffer read that won't block forever
+                var readTask = reader.ReadAsync(buffer, 0, buffer.Length);
+                var completedTask = await Task.WhenAny(readTask, Task.Delay(100, ct));
+                
+                if (completedTask == readTask)
+                {
+                    var bytesRead = await readTask;
+                    if (bytesRead > 0)
+                    {
+                        lock (output)
+                        {
+                            output.Append(buffer, 0, bytesRead);
+                        }
+                    }
+                    else
+                    {
+                        // Stream ended
+                        break;
+                    }
                 }
             }
         }
-        return null;
+        catch (OperationCanceledException)
+        {
+            // Expected when we find the URL or timeout
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug("Error reading bore stream: {Error}", ex.Message);
+        }
     }
     
     private async Task GetPublicIpAsync()
