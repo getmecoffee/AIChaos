@@ -33,3 +33,4 @@ venv/
 # Logs
 *.log
 logs/
+tunnel_url.txt
