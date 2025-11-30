@@ -252,6 +252,36 @@ public class SetupController : ControllerBase
     }
     
     /// <summary>
+    /// Gets the current OpenRouter settings.
+    /// </summary>
+    [HttpGet("openrouter")]
+    public ActionResult GetOpenRouter()
+    {
+        var settings = _settingsService.Settings.OpenRouter;
+        
+        // Mask the API key for display, but show enough to identify it
+        string? maskedKey = null;
+        if (!string.IsNullOrEmpty(settings.ApiKey))
+        {
+            if (settings.ApiKey.Length > 12)
+            {
+                maskedKey = settings.ApiKey[..8] + "..." + settings.ApiKey[^4..];
+            }
+            else
+            {
+                maskedKey = "****";
+            }
+        }
+        
+        return Ok(new { 
+            apiKey = settings.ApiKey, // Return the full key so it can be used
+            maskedKey,
+            model = settings.Model,
+            isConfigured = _settingsService.IsOpenRouterConfigured
+        });
+    }
+    
+    /// <summary>
     /// Saves the OpenRouter API key.
     /// </summary>
     [HttpPost("openrouter")]

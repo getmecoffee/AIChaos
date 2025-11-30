@@ -394,6 +394,20 @@
             document.getElementById('setupContent').classList.remove('hidden');
             loadSetupStatus();
             loadModels();
+            loadOpenRouterSettings();
+        }
+        
+        async function loadOpenRouterSettings() {
+            try {
+                const response = await fetch('/api/setup/openrouter');
+                const data = await response.json();
+                
+                if (data.apiKey) {
+                    document.getElementById('openrouterApiKey').value = data.apiKey;
+                }
+            } catch (err) {
+                console.error('Failed to load OpenRouter settings:', err);
+            }
         }
         
         async function changePassword() {

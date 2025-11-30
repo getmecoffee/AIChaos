@@ -1,7 +1,6 @@
 using System.Text;
 using System.Text.Json;
 using AIChaos.Brain.Models;
-using Microsoft.Extensions.Options;
 
 namespace AIChaos.Brain.Services;
 
@@ -11,7 +10,7 @@ namespace AIChaos.Brain.Services;
 public class AiCodeGeneratorService
 {
     private readonly HttpClient _httpClient;
-    private readonly AppSettings _settings;
+    private readonly SettingsService _settingsService;
     private readonly CommandQueueService _commandQueue;
     private readonly ILogger<AiCodeGeneratorService> _logger;
     
@@ -104,12 +103,12 @@ public class AiCodeGeneratorService
 
     public AiCodeGeneratorService(
         HttpClient httpClient,
-        IOptions<AppSettings> settings,
+        SettingsService settingsService,
         CommandQueueService commandQueue,
         ILogger<AiCodeGeneratorService> logger)
     {
         _httpClient = httpClient;
-        _settings = settings.Value;
+        _settingsService = settingsService;
         _commandQueue = commandQueue;
         _logger = logger;
     }
@@ -147,9 +146,10 @@ public class AiCodeGeneratorService
         
         try
         {
+            var settings = _settingsService.Settings;
             var requestBody = new
             {
-                model = _settings.OpenRouter.Model,
+                model = settings.OpenRouter.Model,
                 messages = new[]
                 {
                     new { role = "system", content = SystemPrompt },
@@ -157,7 +157,7 @@ public class AiCodeGeneratorService
                 }
             };
             
-            var request = new HttpRequestMessage(HttpMethod.Post, $"{_settings.OpenRouter.BaseUrl}/chat/completions")
+            var request = new HttpRequestMessage(HttpMethod.Post, $"{settings.OpenRouter.BaseUrl}/chat/completions")
             {
                 Content = new StringContent(
                     JsonSerializer.Serialize(requestBody),
@@ -165,7 +165,7 @@ public class AiCodeGeneratorService
                     "application/json")
             };
             
-            request.Headers.Add("Authorization", $"Bearer {_settings.OpenRouter.ApiKey}");
+            request.Headers.Add("Authorization", $"Bearer {settings.OpenRouter.ApiKey}");
             
             var response = await _httpClient.SendAsync(request);
             response.EnsureSuccessStatusCode();
@@ -225,9 +225,10 @@ public class AiCodeGeneratorService
         
         try
         {
+            var settings = _settingsService.Settings;
             var requestBody = new
             {
-                model = _settings.OpenRouter.Model,
+                model = settings.OpenRouter.Model,
                 messages = new[]
                 {
                     new { role = "system", content = "You are a Garry's Mod Lua expert. Generate code to completely stop and reverse problematic effects." },
@@ -235,7 +236,7 @@ public class AiCodeGeneratorService
                 }
             };
             
-            var request = new HttpRequestMessage(HttpMethod.Post, $"{_settings.OpenRouter.BaseUrl}/chat/completions")
+            var request = new HttpRequestMessage(HttpMethod.Post, $"{settings.OpenRouter.BaseUrl}/chat/completions")
             {
                 Content = new StringContent(
                     JsonSerializer.Serialize(requestBody),
@@ -243,7 +244,7 @@ public class AiCodeGeneratorService
                     "application/json")
             };
             
-            request.Headers.Add("Authorization", $"Bearer {_settings.OpenRouter.ApiKey}");
+            request.Headers.Add("Authorization", $"Bearer {settings.OpenRouter.ApiKey}");
             
             var response = await _httpClient.SendAsync(request);
             response.EnsureSuccessStatusCode();
