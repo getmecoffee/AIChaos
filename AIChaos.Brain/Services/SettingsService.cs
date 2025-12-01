@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using AIChaos.Brain.Models;
 using Microsoft.Extensions.Options;
@@ -29,16 +30,15 @@ public class SettingsService
     public string ModerationPassword => _moderationPassword;
     
     /// <summary>
-    /// Generates a small random password for moderation access.
+    /// Generates a small random password for moderation access using cryptographically secure random.
     /// </summary>
     private static string GenerateModPassword()
     {
         const string chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-        var random = new Random();
         var password = new char[6];
         for (int i = 0; i < password.Length; i++)
         {
-            password[i] = chars[random.Next(chars.Length)];
+            password[i] = chars[RandomNumberGenerator.GetInt32(chars.Length)];
         }
         return new string(password);
     }

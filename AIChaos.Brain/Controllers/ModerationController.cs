@@ -6,6 +6,7 @@ namespace AIChaos.Brain.Controllers;
 
 /// <summary>
 /// Controller for image moderation endpoints.
+/// Requires moderation password authentication via X-Moderation-Password header.
 /// </summary>
 [ApiController]
 [Route("api/moderation")]
@@ -32,11 +33,35 @@ public class ModerationController : ControllerBase
     }
     
     /// <summary>
+    /// Validates the moderation password from request header.
+    /// </summary>
+    private bool IsAuthenticated()
+    {
+        var password = Request.Headers["X-Moderation-Password"].FirstOrDefault();
+        return !string.IsNullOrEmpty(password) && 
+               _settingsService.ValidateModerationPassword(password);
+    }
+    
+    /// <summary>
+    /// Returns unauthorized response for missing/invalid moderation password.
+    /// </summary>
+    private ActionResult UnauthorizedModerationAccess()
+    {
+        return StatusCode(401, new ApiResponse
+        {
+            Status = "error",
+            Message = "Moderation password required. Include X-Moderation-Password header."
+        });
+    }
+    
+    /// <summary>
     /// Gets all pending images awaiting moderation.
     /// </summary>
     [HttpGet("pending")]
     public ActionResult<PendingImagesResponse> GetPendingImages()
     {
+        if (!IsAuthenticated()) return UnauthorizedModerationAccess();
+        
         var images = _moderationService.GetPendingImages();
         return Ok(new PendingImagesResponse
         {
@@ -51,6 +76,8 @@ public class ModerationController : ControllerBase
     [HttpGet("all")]
     public ActionResult<PendingImagesResponse> GetAllImages()
     {
+        if (!IsAuthenticated()) return UnauthorizedModerationAccess();
+        
         var images = _moderationService.GetAllImages();
         return Ok(new PendingImagesResponse
         {
@@ -65,6 +92,8 @@ public class ModerationController : ControllerBase
     [HttpPost("approve")]
     public async Task<ActionResult<ApiResponse>> ApproveImage([FromBody] ImageReviewRequest request)
     {
+        if (!IsAuthenticated()) return UnauthorizedModerationAccess();
+        
         var entry = _moderationService.ApproveImage(request.ImageId);
         if (entry == null)
         {
@@ -106,6 +135,8 @@ public class ModerationController : ControllerBase
     [HttpPost("deny")]
     public ActionResult<ApiResponse> DenyImage([FromBody] ImageReviewRequest request)
     {
+        if (!IsAuthenticated()) return UnauthorizedModerationAccess();
+        
         var entry = _moderationService.DenyImage(request.ImageId);
         if (entry == null)
         {
@@ -129,6 +160,8 @@ public class ModerationController : ControllerBase
     [HttpGet("count")]
     public ActionResult GetPendingCount()
     {
+        if (!IsAuthenticated()) return UnauthorizedModerationAccess();
+        
         return Ok(new { count = _moderationService.PendingCount });
     }
 }

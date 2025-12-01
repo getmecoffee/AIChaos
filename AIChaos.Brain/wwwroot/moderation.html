@@ -169,6 +169,15 @@
     <script>
         let isLoggedIn = false;
         let autoRefreshInterval = null;
+        let moderationPassword = '';
+        
+        // Helper to get auth headers
+        function getAuthHeaders() {
+            return {
+                'Content-Type': 'application/json',
+                'X-Moderation-Password': moderationPassword
+            };
+        }
         
         async function login() {
             const password = document.getElementById('loginPassword').value.toUpperCase();
@@ -183,6 +192,7 @@
                 const data = await response.json();
                 
                 if (data.status === 'success') {
+                    moderationPassword = password;
                     showModerationContent();
                 } else {
                     showLoginAlert(data.message || 'Invalid password', 'error');
@@ -240,8 +250,15 @@
         
         async function loadPendingImages() {
             try {
-                const response = await fetch('/api/moderation/pending');
+                const response = await fetch('/api/moderation/pending', {
+                    headers: getAuthHeaders()
+                });
                 const data = await response.json();
+                
+                if (response.status === 401) {
+                    showAlert('Session expired. Please refresh and login again.', 'error');
+                    return;
+                }
                 
                 document.getElementById('pendingCount').textContent = data.totalPending;
                 renderPendingImages(data.images);
@@ -252,8 +269,12 @@
         
         async function loadAllImages() {
             try {
-                const response = await fetch('/api/moderation/all');
+                const response = await fetch('/api/moderation/all', {
+                    headers: getAuthHeaders()
+                });
                 const data = await response.json();
+                
+                if (response.status === 401) return;
                 
                 const reviewed = data.images.filter(i => i.status !== 'Pending');
                 renderReviewedImages(reviewed.slice(-10).reverse());
@@ -329,7 +350,7 @@
             try {
                 const response = await fetch('/api/moderation/approve', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: getAuthHeaders(),
                     body: JSON.stringify({ imageId, approved: true })
                 });
                 
@@ -351,7 +372,7 @@
             try {
                 const response = await fetch('/api/moderation/deny', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: getAuthHeaders(),
                     body: JSON.stringify({ imageId, approved: false })
                 });
                 

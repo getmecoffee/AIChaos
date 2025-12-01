@@ -10,7 +10,6 @@ public class AppSettings
     public YouTubeSettings YouTube { get; set; } = new();
     public SafetySettings Safety { get; set; } = new();
     public AdminSettings Admin { get; set; } = new();
-    public ModerationSettings Moderation { get; set; } = new();
     public TunnelSettings Tunnel { get; set; } = new();
 }
 
@@ -61,12 +60,6 @@ public class AdminSettings
 {
     public string Password { get; set; } = "";
     public bool IsConfigured => !string.IsNullOrEmpty(Password);
-}
-
-public class ModerationSettings
-{
-    public string SessionPassword { get; set; } = "";
-    public bool IsConfigured => !string.IsNullOrEmpty(SessionPassword);
 }
 
 public class TunnelSettings
