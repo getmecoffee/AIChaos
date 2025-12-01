@@ -318,16 +318,16 @@
             <!-- Test Client Mode -->
             <div class="card">
                 <h2>
-                    🧪 Test Client Mode
+                    🧪 AI-Driven Test Client Mode
                     <span id="testClientStatus" class="status-badge status-disconnected">Disabled</span>
                 </h2>
                 <div class="alert alert-info" style="margin-bottom: 15px;">
-                    <strong>ℹ️ About Test Client Mode:</strong> Run GMod with <code>-multirun</code> to have a separate test client receive and execute commands first. If the code runs without errors on the test client, it's then sent to your main player client. This protects your main game from seeing crashes or errors!
+                    <strong>ℹ️ About AI-Driven Test Client Mode:</strong> Run GMod with <code>-multirun</code> to have a separate test client receive and execute commands first. If the code fails, an <strong>AI agent</strong> will automatically analyze the error and fix the code, retrying up to 3 times. Only working code is sent to your main player client. This protects your main game from seeing crashes or errors!
                 </div>
                 
                 <div class="form-group checkbox-group">
                     <input type="checkbox" id="testClientModeToggle" onchange="toggleTestClientMode()">
-                    <label for="testClientModeToggle" style="margin: 0; font-weight: bold;">Enable Test Client Mode</label>
+                    <label for="testClientModeToggle" style="margin: 0; font-weight: bold;">Enable AI-Driven Test Client Mode</label>
                 </div>
                 
                 <div id="testClientSettings" class="hidden" style="margin-top: 15px;">
@@ -366,6 +366,12 @@
                             <div style="margin-top: 5px; font-size: 12px;">
                                 Last poll: <span id="testClientLastPoll">Never</span>
                             </div>
+                        </div>
+                        <div style="margin-top: 10px; padding: 10px; background: rgba(0,255,0,0.1); border-radius: 5px;">
+                            <strong>🤖 AI Error-Fixing Active</strong>
+                            <p style="margin: 5px 0 0 0; font-size: 12px; color: var(--text-dim);">
+                                When code fails on test client, AI will analyze the error and generate a fix (up to 3 attempts).
+                            </p>
                         </div>
                     </div>
                 </div>

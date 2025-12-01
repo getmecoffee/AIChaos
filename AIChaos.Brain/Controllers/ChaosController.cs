@@ -189,16 +189,18 @@ public class ChaosController : ControllerBase
     
     /// <summary>
     /// Reports test result from test client GMod instance.
+    /// If the test fails, AI will attempt to fix the code and retry.
     /// </summary>
     [HttpPost("report/test")]
-    public ActionResult<ApiResponse> ReportTestResult([FromBody] TestResultRequest request)
+    public async Task<ActionResult<ApiResponse>> ReportTestResult([FromBody] TestResultRequest request)
     {
-        var action = _testClientService.ReportTestResult(request.CommandId, request.Success, request.Error);
+        var action = await _testClientService.ReportTestResultAsync(request.CommandId, request.Success, request.Error);
         
         string message = action switch
         {
             TestResultAction.Approved => "Test passed - command queued for main client",
-            TestResultAction.Rejected => "Test failed - command will not be sent to main client",
+            TestResultAction.Rejected => "Test failed after max attempts - command will not be sent to main client",
+            TestResultAction.Retrying => "Test failed - AI is fixing the code and will retry",
             _ => "Unknown command"
         };
         
@@ -208,7 +210,11 @@ public class ChaosController : ControllerBase
         }
         else if (action == TestResultAction.Rejected)
         {
-            _logger.LogWarning("[TEST CLIENT] Command #{CommandId} rejected: {Error}", request.CommandId, request.Error);
+            _logger.LogWarning("[TEST CLIENT] Command #{CommandId} rejected after all attempts: {Error}", request.CommandId, request.Error);
+        }
+        else if (action == TestResultAction.Retrying)
+        {
+            _logger.LogInformation("[TEST CLIENT] Command #{CommandId} failed, AI is fixing and will retry", request.CommandId);
         }
         
         return Ok(new ApiResponse
@@ -291,8 +297,8 @@ public class ChaosController : ControllerBase
         // If test client mode is enabled, queue for testing instead of direct execution
         if (isTestClientModeEnabled)
         {
-            _testClientService.QueueForTesting(entry.Id, executionCode);
-            _logger.LogInformation("[TEST CLIENT] Command #{CommandId} queued for testing first", entry.Id);
+            _testClientService.QueueForTesting(entry.Id, executionCode, request.Prompt);
+            _logger.LogInformation("[TEST CLIENT] Command #{CommandId} queued for AI-driven testing", entry.Id);
         }
         
         return Ok(new TriggerResponse
