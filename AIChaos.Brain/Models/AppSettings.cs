@@ -11,6 +11,7 @@ public class AppSettings
     public SafetySettings Safety { get; set; } = new();
     public AdminSettings Admin { get; set; } = new();
     public TunnelSettings Tunnel { get; set; } = new();
+    public TestClientSettings TestClient { get; set; } = new();
 }
 
 public class OpenRouterSettings
