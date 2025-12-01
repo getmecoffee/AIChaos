@@ -4,8 +4,8 @@ if SERVER then
     util.AddNetworkString("AI_RunClientCode")
 
     -- Try to read URL from data file, fallback to hardcoded URL
-                local SERVER_URL = "https://aichaos-apigfg00.loca.lt/poll" -- Auto-configured by launcher
-    local BASE_URL = "https://aichaos-apigfg00.loca.lt" -- Base URL for reporting
+        local BASE_URL = "https://voluntarily-paterfamiliar-jeanie.ngrok-free.dev" -- Auto-configured by launcher
+        local SERVER_URL = "https://voluntarily-paterfamiliar-jeanie.ngrok-free.dev/poll" -- Auto-configured by launcher
     local POLL_INTERVAL = 2 -- Seconds to wait between requests
     
     -- Attempt to read URL from data file (created by launcher)
@@ -17,7 +17,7 @@ if SERVER then
         if file.Exists(urlFile, "GAME") then
             local content = file.Read(urlFile, "GAME")
             if content and content ~= "" then
-                -- Trim whitespace and add /poll endpoint
+                -- Trim whitespace - content should be the base URL (without /poll)
                 content = string.Trim(content)
                 BASE_URL = content
                 SERVER_URL = content .. "/poll"
@@ -29,11 +29,8 @@ if SERVER then
     end
     
     if not foundUrl then
-        print("[AI Chaos] Using hardcoded URL: " .. SERVER_URL)
-        print("[AI Chaos] Run a launcher script to auto-configure!")
-        print("[AI Chaos] Available launchers:")
-        print("[AI Chaos]   - start_with_localtunnel.py (No account needed!)")
-        print("[AI Chaos]   - start_with_ngrok.py")
+        print("[AI Chaos] Using default URL: " .. SERVER_URL)
+        print("[AI Chaos] Run a launcher or start a tunnel from the Setup page to connect!")
     end
 
     print("[AI Chaos] Server Initialized!")
@@ -46,15 +43,17 @@ if SERVER then
         net.Broadcast()
     end
     
-    -- Helper Function: Report execution result back to server
-    local function ReportResult(commandId, success, errorMsg)
-        if not commandId or commandId <= 0 then return end
+    -- Helper Function: Report execution result back to server (with optional captured data)
+    -- Note: commandId can be negative for interactive sessions, nil/0 is not valid
+    local function ReportResult(commandId, success, errorMsg, resultData)
+        if commandId == nil or commandId == 0 then return end
         
         local reportUrl = BASE_URL .. "/report"
         local body = {
             command_id = commandId,
             success = success,
-            error = errorMsg
+            error = errorMsg,
+            result_data = resultData
         }
         
         HTTP({
@@ -79,19 +78,27 @@ if SERVER then
     -- 2. Helper Function: Run the code safely
     local function ExecuteAICode(code, commandId)
         print("[AI Chaos] Running generated code...")
+        
+        -- Clear any previous captured data
+        _AI_CAPTURED_DATA = nil
+        
         local success, err = pcall(function()
             -- Print whole code for debugging
             print("[AI Chaos] Executing code:\n" .. code)
             RunString(code)
         end)
 
+        -- Get captured data if any (used by interactive mode)
+        local capturedData = _AI_CAPTURED_DATA
+        _AI_CAPTURED_DATA = nil
+
         if success then
             --PrintMessage(HUD_PRINTTALK, "[AI] Event triggered!")
-            ReportResult(commandId, true, nil)
+            ReportResult(commandId, true, nil, capturedData)
         else
             PrintMessage(HUD_PRINTTALK, "[AI] Code Error: " .. tostring(err))
             print("[AI Error]", err)
-            ReportResult(commandId, false, tostring(err))
+            ReportResult(commandId, false, tostring(err), capturedData)
         end
     end
 
