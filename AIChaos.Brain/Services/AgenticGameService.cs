@@ -733,19 +733,7 @@ public class AgenticGameService
         // Ensure code is properly trimmed and has newlines to avoid syntax errors like "endend)"
         var trimmedCode = code.Trim();
         
-        // Escape any special characters in the user code for embedding in a string
-        // We need to escape: backslashes, double brackets, and quotes
-        var escapedCode = trimmedCode
-            .Replace("\\", "\\\\")
-            .Replace("[[", "\\[\\[")
-            .Replace("]]", "\\]\\]")
-            .Replace("\"", "\\\"")
-            .Replace("\n", "\\n")
-            .Replace("\r", "")
-            .Replace("\t", "\\t");
-        
-        // Use RunString with handleError=false instead of pcall to get proper error messages
-        // The user code is stored as a string and executed via RunString
+        // Use regular string concatenation since Lua uses {} which conflicts with C# interpolation
         return @"
             local _capturedOutput = {}
             local _originalPrint = print
@@ -790,18 +778,23 @@ public class AgenticGameService
                 if indent == 0 then _originalPrintTable(tbl) end
             end
             
-            -- Execute user code using RunString with handleError=false to get proper error messages
-            local _userCode = """ + escapedCode + @"""
-            local _err = RunString(_userCode, ""AI_UserCode"", false)
+            local _success, _err = pcall(function()
+                " + trimmedCode + @"
+            end)
             
             print = _originalPrint
             PrintTable = _originalPrintTable
             
             _AI_CAPTURED_DATA = table.concat(_capturedOutput, ""\n"")
-            
-            -- If RunString returned an error string, propagate it
-            if _err ~= nil and _err ~= """" then 
-                error(tostring(_err)) 
+            if not _success then 
+                -- Ensure error message is a proper string, not just 'false'
+                local errMsg = _err
+                if errMsg == nil or errMsg == false then
+                    errMsg = ""Unknown error occurred during execution""
+                else
+                    errMsg = tostring(errMsg)
+                end
+                error(errMsg) 
             end
             ";
     }
