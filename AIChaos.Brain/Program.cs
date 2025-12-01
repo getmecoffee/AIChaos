@@ -20,6 +20,7 @@ builder.Services.AddSingleton<InteractiveAiService>();
 builder.Services.AddSingleton<TwitchService>();
 builder.Services.AddSingleton<YouTubeService>();
 builder.Services.AddSingleton<TunnelService>();
+builder.Services.AddSingleton<TestClientService>();
 
 // Configure CORS for local development
 builder.Services.AddCors(options =>

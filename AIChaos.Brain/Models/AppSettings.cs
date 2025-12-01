@@ -79,6 +79,47 @@ public enum TunnelType
 }
 
 /// <summary>
+/// Settings for test client mode - runs commands on a separate GMod instance first.
+/// </summary>
+public class TestClientSettings
+{
+    /// <summary>
+    /// Whether test client mode is enabled.
+    /// </summary>
+    public bool Enabled { get; set; } = false;
+    
+    /// <summary>
+    /// The map to load on the test client (should be a small/fast-loading map).
+    /// </summary>
+    public string TestMap { get; set; } = "gm_flatgrass";
+    
+    /// <summary>
+    /// Whether to run gmod_admin_cleanup after each test.
+    /// </summary>
+    public bool CleanupAfterTest { get; set; } = true;
+    
+    /// <summary>
+    /// Timeout in seconds to wait for test client to respond.
+    /// </summary>
+    public int TimeoutSeconds { get; set; } = 10;
+    
+    /// <summary>
+    /// Path to the GMod executable for launching test client.
+    /// </summary>
+    public string GmodPath { get; set; } = "";
+    
+    /// <summary>
+    /// Whether a test client is currently connected.
+    /// </summary>
+    public bool IsConnected { get; set; } = false;
+    
+    /// <summary>
+    /// Last time the test client polled.
+    /// </summary>
+    public DateTime? LastPollTime { get; set; } = null;
+}
+
+/// <summary>
 /// Represents a saved payload for random chaos mode.
 /// </summary>
 public class SavedPayload

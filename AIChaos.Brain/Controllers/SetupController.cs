@@ -252,6 +252,16 @@ public class SetupController : ControllerBase
                 Type = tunnelStatus.Type.ToString(),
                 Url = tunnelStatus.Url,
                 PublicIp = tunnelStatus.PublicIp
+            },
+            TestClient = new TestClientState
+            {
+                Enabled = settings.TestClient.Enabled,
+                IsConnected = settings.TestClient.IsConnected,
+                TestMap = settings.TestClient.TestMap,
+                CleanupAfterTest = settings.TestClient.CleanupAfterTest,
+                TimeoutSeconds = settings.TestClient.TimeoutSeconds,
+                GmodPath = settings.TestClient.GmodPath,
+                LastPollTime = settings.TestClient.LastPollTime
             }
         });
     }
@@ -622,6 +632,105 @@ public class SetupController : ControllerBase
         _youtubeService.StopListening();
         return Ok(new { status = "success", message = "Stopped listening to YouTube" });
     }
+    
+    // ==========================================
+    // TEST CLIENT MODE
+    // ==========================================
+    
+    /// <summary>
+    /// Get test client mode status.
+    /// </summary>
+    [HttpGet("test-client")]
+    public ActionResult GetTestClientStatus()
+    {
+        var settings = _settingsService.Settings.TestClient;
+        return Ok(new { 
+            enabled = settings.Enabled,
+            isConnected = settings.IsConnected,
+            testMap = settings.TestMap,
+            cleanupAfterTest = settings.CleanupAfterTest,
+            timeoutSeconds = settings.TimeoutSeconds,
+            gmodPath = settings.GmodPath,
+            lastPollTime = settings.LastPollTime
+        });
+    }
+    
+    /// <summary>
+    /// Enable or disable test client mode.
+    /// </summary>
+    [HttpPost("test-client/toggle")]
+    public ActionResult ToggleTestClientMode([FromBody] TestClientModeRequest request)
+    {
+        _settingsService.SetTestClientMode(request.Enabled);
+        _logger.LogInformation("Test Client Mode set to: {Enabled}", request.Enabled);
+        
+        return Ok(new { 
+            status = "success", 
+            message = request.Enabled ? "Test Client Mode enabled" : "Test Client Mode disabled",
+            enabled = request.Enabled
+        });
+    }
+    
+    /// <summary>
+    /// Update test client settings.
+    /// </summary>
+    [HttpPost("test-client/settings")]
+    public ActionResult UpdateTestClientSettings([FromBody] TestClientSettingsRequest request)
+    {
+        var existing = _settingsService.Settings.TestClient;
+        existing.TestMap = request.TestMap ?? existing.TestMap;
+        existing.CleanupAfterTest = request.CleanupAfterTest ?? existing.CleanupAfterTest;
+        existing.TimeoutSeconds = request.TimeoutSeconds ?? existing.TimeoutSeconds;
+        existing.GmodPath = request.GmodPath ?? existing.GmodPath;
+        
+        _settingsService.UpdateTestClient(existing);
+        _logger.LogInformation("Test Client settings updated");
+        
+        return Ok(new { status = "success", message = "Test Client settings saved" });
+    }
+    
+    /// <summary>
+    /// Launch a test client instance of GMod with -multirun.
+    /// </summary>
+    [HttpPost("test-client/launch")]
+    public ActionResult LaunchTestClient()
+    {
+        var settings = _settingsService.Settings.TestClient;
+        
+        if (string.IsNullOrEmpty(settings.GmodPath))
+        {
+            return BadRequest(new { status = "error", message = "GMod path not configured. Please set the path to your GMod executable." });
+        }
+        
+        if (!System.IO.File.Exists(settings.GmodPath))
+        {
+            return BadRequest(new { status = "error", message = $"GMod executable not found at: {settings.GmodPath}" });
+        }
+        
+        try
+        {
+            var startInfo = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = settings.GmodPath,
+                Arguments = $"-multirun -windowed -w 640 -h 480 +map {settings.TestMap} +ai_chaos_test_client 1",
+                UseShellExecute = true
+            };
+            
+            System.Diagnostics.Process.Start(startInfo);
+            _logger.LogInformation("Launched test client with map: {Map}", settings.TestMap);
+            
+            return Ok(new { 
+                status = "success", 
+                message = $"Test client launched with map {settings.TestMap}",
+                note = "The test client will connect automatically when the game loads."
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to launch test client");
+            return BadRequest(new { status = "error", message = $"Failed to launch test client: {ex.Message}" });
+        }
+    }
 }
 
 // Request models
@@ -639,4 +748,17 @@ public class SetPasswordRequest
 public class PrivateDiscordModeRequest
 {
     public bool Enabled { get; set; } = false;
+}
+
+public class TestClientModeRequest
+{
+    public bool Enabled { get; set; } = false;
+}
+
+public class TestClientSettingsRequest
+{
+    public string? TestMap { get; set; }
+    public bool? CleanupAfterTest { get; set; }
+    public int? TimeoutSeconds { get; set; }
+    public string? GmodPath { get; set; }
 }

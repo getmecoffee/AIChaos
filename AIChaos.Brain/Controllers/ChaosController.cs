@@ -15,6 +15,7 @@ public class ChaosController : ControllerBase
     private readonly AiCodeGeneratorService _codeGenerator;
     private readonly InteractiveAiService _interactiveAi;
     private readonly SettingsService _settingsService;
+    private readonly TestClientService _testClientService;
     private readonly ILogger<ChaosController> _logger;
     
     public ChaosController(
@@ -22,17 +23,20 @@ public class ChaosController : ControllerBase
         AiCodeGeneratorService codeGenerator,
         InteractiveAiService interactiveAi,
         SettingsService settingsService,
+        TestClientService testClientService,
         ILogger<ChaosController> logger)
     {
         _commandQueue = commandQueue;
         _codeGenerator = codeGenerator;
         _interactiveAi = interactiveAi;
         _settingsService = settingsService;
+        _testClientService = testClientService;
         _logger = logger;
     }
     
     /// <summary>
     /// Polls for the next command in the queue (called by GMod).
+    /// If test client mode is enabled, only returns commands that passed testing.
     /// Supports both GET and POST for compatibility with various tunnel services.
     /// </summary>
     [HttpGet("poll")]
@@ -42,6 +46,37 @@ public class ChaosController : ControllerBase
         // Log incoming request for debugging
         _logger.LogDebug("Poll request received from {RemoteIp}", HttpContext.Connection.RemoteIpAddress);
         
+        // Check for timed out tests
+        _testClientService.CheckTimeouts();
+        
+        // Add ngrok bypass header in response
+        Response.Headers.Append("ngrok-skip-browser-warning", "true");
+        
+        // If test client mode is enabled, check for approved commands first
+        if (_testClientService.IsEnabled)
+        {
+            var approvedResult = _testClientService.PollApprovedCommand();
+            if (approvedResult.HasValue)
+            {
+                _logger.LogInformation("[MAIN CLIENT] Sending approved command #{CommandId}", approvedResult.Value.CommandId);
+                return new PollResponse
+                {
+                    HasCode = true,
+                    Code = approvedResult.Value.Code,
+                    CommandId = approvedResult.Value.CommandId
+                };
+            }
+            
+            // No approved commands, return empty
+            return new PollResponse
+            {
+                HasCode = false,
+                Code = null,
+                CommandId = null
+            };
+        }
+        
+        // Test client mode is disabled, use normal queue
         var result = _commandQueue.PollNextCommand();
         
         // Add ngrok bypass header in response (helps with some ngrok configurations)
@@ -131,6 +166,60 @@ public class ChaosController : ControllerBase
     }
     
     /// <summary>
+    /// Polls for the next command to test (called by test client GMod instance).
+    /// </summary>
+    [HttpGet("poll/test")]
+    [HttpPost("poll/test")]
+    public ActionResult<TestPollResponse> PollTest()
+    {
+        _logger.LogDebug("Test client poll received from {RemoteIp}", HttpContext.Connection.RemoteIpAddress);
+        
+        Response.Headers.Append("ngrok-skip-browser-warning", "true");
+        
+        var result = _testClientService.PollTestCommand();
+        
+        if (result != null)
+        {
+            return Ok(result);
+        }
+        
+        // Return 204 No Content when there's nothing to test
+        return NoContent();
+    }
+    
+    /// <summary>
+    /// Reports test result from test client GMod instance.
+    /// </summary>
+    [HttpPost("report/test")]
+    public ActionResult<ApiResponse> ReportTestResult([FromBody] TestResultRequest request)
+    {
+        var action = _testClientService.ReportTestResult(request.CommandId, request.Success, request.Error);
+        
+        string message = action switch
+        {
+            TestResultAction.Approved => "Test passed - command queued for main client",
+            TestResultAction.Rejected => "Test failed - command will not be sent to main client",
+            _ => "Unknown command"
+        };
+        
+        if (action == TestResultAction.Approved)
+        {
+            _logger.LogInformation("[TEST CLIENT] Command #{CommandId} approved", request.CommandId);
+        }
+        else if (action == TestResultAction.Rejected)
+        {
+            _logger.LogWarning("[TEST CLIENT] Command #{CommandId} rejected: {Error}", request.CommandId, request.Error);
+        }
+        
+        return Ok(new ApiResponse
+        {
+            Status = action == TestResultAction.Unknown ? "error" : "success",
+            Message = message,
+            CommandId = request.CommandId
+        });
+    }
+    
+    /// <summary>
     /// Triggers a new chaos command.
     /// </summary>
     [HttpPost("trigger")]
@@ -194,9 +283,16 @@ public class ChaosController : ControllerBase
             null,
             request.UserId);
         
+        // If test client mode is enabled, queue for testing instead of direct execution
+        if (_testClientService.IsEnabled)
+        {
+            _testClientService.QueueForTesting(entry.Id, executionCode);
+            _logger.LogInformation("[TEST CLIENT] Command #{CommandId} queued for testing first", entry.Id);
+        }
+        
         return Ok(new TriggerResponse
         {
-            Status = "queued",
+            Status = _testClientService.IsEnabled ? "testing" : "queued",
             CodePreview = executionCode,
             HasUndo = true,
             CommandId = entry.Id,
