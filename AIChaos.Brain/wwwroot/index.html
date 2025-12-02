@@ -98,16 +98,13 @@
         <div class="header">
             <h1>🎮 AI CHAOS VIEWER</h1>
             <div id="authSection">
-                <!-- Google Sign-In Button -->
-                <div id="g_id_onload" data-client_id="YOUR_GOOGLE_CLIENT_ID" data-callback="handleCredentialResponse"
-                    data-auto_select="true">
-                </div>
-                <div class="g_id_signin" data-type="standard"></div>
+                <!-- Google Sign-In Button Container -->
+                <div id="g_id_signin"></div>
             </div>
             <div id="userSection" class="hidden user-profile">
                 <img id="userAvatar" src="" style="width: 30px; height: 30px; border-radius: 50%;">
                 <span id="userName">Guest</span>
-                <span class="credits-display">💎 <span id="userCredits">0.00</span></span>
+                <span class="credits-display">$ <span id="userCredits">0.00</span></span>
                 <button onclick="signOut()"
                     style="background: none; border: none; color: var(--text-dim); cursor: pointer;">(Logout)</button>
             </div>
@@ -189,6 +186,34 @@
         let currentInteractiveSessionId = null;
         let interactivePollingInterval = null;
         let currentMaxIterations = 5;
+
+        // --- Init ---
+        window.onload = async function () {
+            try {
+                const res = await fetch('/api/auth/config');
+                const config = await res.json();
+
+                if (config.googleClientId) {
+                    google.accounts.id.initialize({
+                        client_id: config.googleClientId,
+                        callback: handleCredentialResponse,
+                        auto_select: true
+                    });
+
+                    google.accounts.id.renderButton(
+                        document.getElementById("g_id_signin"),
+                        { theme: "outline", size: "large" }
+                    );
+
+                    google.accounts.id.prompt(); // Also display the One Tap dialog
+                } else {
+                    console.error("Google Client ID not configured");
+                    document.getElementById("authSection").innerHTML = '<div class="alert alert-warning">Sign-in not configured</div>';
+                }
+            } catch (err) {
+                console.error("Failed to load auth config", err);
+            }
+        };
 
         // --- Auth Functions ---
         function handleCredentialResponse(response) {

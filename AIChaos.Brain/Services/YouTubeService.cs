@@ -15,52 +15,55 @@ public partial class YouTubeService : IDisposable
     private readonly SettingsService _settingsService;
     private readonly CommandQueueService _commandQueue;
     private readonly AiCodeGeneratorService _codeGenerator;
+    private readonly UserService _userService;
     private readonly ILogger<YouTubeService> _logger;
-    
+
     private Google.Apis.YouTube.v3.YouTubeService? _youtubeService;
     private CancellationTokenSource? _cancellationTokenSource;
     private Task? _pollingTask;
     private readonly Dictionary<string, DateTime> _cooldowns = new();
-    
+
     public bool IsListening => _pollingTask != null && !_pollingTask.IsCompleted;
     public string? CurrentVideoId { get; private set; }
     public string? LiveChatId { get; private set; }
-    
+
     public YouTubeService(
         SettingsService settingsService,
         CommandQueueService commandQueue,
         AiCodeGeneratorService codeGenerator,
+        UserService userService,
         ILogger<YouTubeService> logger)
     {
         _settingsService = settingsService;
         _commandQueue = commandQueue;
         _codeGenerator = codeGenerator;
+        _userService = userService;
         _logger = logger;
     }
-    
+
     /// <summary>
     /// Initializes the YouTube service with stored credentials.
     /// </summary>
     public async Task<bool> InitializeAsync()
     {
         var settings = _settingsService.Settings.YouTube;
-        
+
         if (string.IsNullOrEmpty(settings.AccessToken))
         {
             _logger.LogWarning("YouTube not configured - missing access token");
             return false;
         }
-        
+
         try
         {
             var credential = GoogleCredential.FromAccessToken(settings.AccessToken);
-            
+
             _youtubeService = new Google.Apis.YouTube.v3.YouTubeService(new BaseClientService.Initializer
             {
                 HttpClientInitializer = credential,
                 ApplicationName = "AIChaos Brain"
             });
-            
+
             _logger.LogInformation("YouTube service initialized");
             return true;
         }
@@ -70,7 +73,7 @@ public partial class YouTubeService : IDisposable
             return false;
         }
     }
-    
+
     /// <summary>
     /// Gets the live chat ID for a video.
     /// </summary>
@@ -80,15 +83,15 @@ public partial class YouTubeService : IDisposable
         {
             return null;
         }
-        
+
         try
         {
             var request = _youtubeService.Videos.List("liveStreamingDetails");
             request.Id = videoId;
-            
+
             var response = await request.ExecuteAsync();
             var video = response.Items?.FirstOrDefault();
-            
+
             return video?.LiveStreamingDetails?.ActiveLiveChatId;
         }
         catch (Exception ex)
@@ -97,7 +100,7 @@ public partial class YouTubeService : IDisposable
             return null;
         }
     }
-    
+
     /// <summary>
     /// Starts listening to YouTube live chat.
     /// </summary>
@@ -105,39 +108,39 @@ public partial class YouTubeService : IDisposable
     {
         var settings = _settingsService.Settings.YouTube;
         videoId ??= settings.VideoId;
-        
+
         if (string.IsNullOrEmpty(videoId))
         {
             _logger.LogWarning("No video ID provided");
             return false;
         }
-        
+
         if (!await InitializeAsync())
         {
             return false;
         }
-        
+
         var liveChatId = await GetLiveChatIdAsync(videoId);
         if (string.IsNullOrEmpty(liveChatId))
         {
             _logger.LogWarning("Could not find live chat for video {VideoId}", videoId);
             return false;
         }
-        
+
         CurrentVideoId = videoId;
         LiveChatId = liveChatId;
-        
+
         _cancellationTokenSource = new CancellationTokenSource();
         _pollingTask = PollLiveChatAsync(liveChatId, _cancellationTokenSource.Token);
-        
+
         settings.VideoId = videoId;
         settings.Enabled = true;
         _settingsService.SaveSettings();
-        
+
         _logger.LogInformation("Started listening to YouTube live chat for video {VideoId}", videoId);
         return true;
     }
-    
+
     /// <summary>
     /// Stops listening to YouTube live chat.
     /// </summary>
@@ -146,36 +149,36 @@ public partial class YouTubeService : IDisposable
         _cancellationTokenSource?.Cancel();
         CurrentVideoId = null;
         LiveChatId = null;
-        
+
         var settings = _settingsService.Settings.YouTube;
         settings.Enabled = false;
         _settingsService.SaveSettings();
-        
+
         _logger.LogInformation("Stopped listening to YouTube live chat");
     }
-    
+
     private async Task PollLiveChatAsync(string liveChatId, CancellationToken cancellationToken)
     {
         var settings = _settingsService.Settings.YouTube;
         string? nextPageToken = null;
-        
+
         while (!cancellationToken.IsCancellationRequested)
         {
             try
             {
                 if (_youtubeService == null) break;
-                
+
                 var request = _youtubeService.LiveChatMessages.List(liveChatId, "snippet,authorDetails");
                 request.PageToken = nextPageToken;
-                
+
                 var response = await request.ExecuteAsync(cancellationToken);
                 nextPageToken = response.NextPageToken;
-                
+
                 foreach (var message in response.Items ?? [])
                 {
-                    await ProcessMessageAsync(message);
+                    ProcessMessageAsync(message);
                 }
-                
+
                 // Wait before next poll (use pollingIntervalMillis from response)
                 var delay = (int)(response.PollingIntervalMillis ?? 5000);
                 await Task.Delay(delay, cancellationToken);
@@ -191,88 +194,51 @@ public partial class YouTubeService : IDisposable
             }
         }
     }
-    
-    private async Task ProcessMessageAsync(LiveChatMessage message)
+
+    private void ProcessMessageAsync(LiveChatMessage message)
     {
         var settings = _settingsService.Settings.YouTube;
         var snippet = message.Snippet;
         var author = message.AuthorDetails;
-        
+
         if (snippet == null || author == null) return;
-        
+
         var messageText = snippet.DisplayMessage ?? "";
         var username = author.DisplayName ?? "Unknown";
-        var isMod = author.IsChatModerator ?? false;
-        
+        var channelId = author.ChannelId ?? "";
+
         // Check for Super Chat
         var isSuperChat = snippet.Type == "superChatEvent" || snippet.Type == "superStickerEvent";
         decimal superChatAmount = 0;
-        
+
         if (isSuperChat && snippet.SuperChatDetails != null)
         {
             superChatAmount = (decimal)(snippet.SuperChatDetails.AmountMicros ?? 0) / 1_000_000m;
             messageText = snippet.SuperChatDetails.UserComment ?? messageText;
         }
-        
-        // Determine if we should process this message
-        bool shouldProcess = false;
-        
-        if (isSuperChat && superChatAmount >= settings.MinSuperChatAmount)
-        {
-            shouldProcess = true;
-            _logger.LogInformation("[YouTube] Super Chat from {Username}: ${Amount} - {Message}",
-                username, superChatAmount, messageText);
-        }
-        else if (settings.AllowRegularChat && messageText.StartsWith(settings.ChatCommand, StringComparison.OrdinalIgnoreCase))
-        {
-            shouldProcess = true;
-            messageText = messageText[settings.ChatCommand.Length..].Trim();
-            _logger.LogInformation("[YouTube] Chat from {Username}: {Message}", username, messageText);
-        }
-        
-        if (!shouldProcess || string.IsNullOrEmpty(messageText))
+
+        // Only process Super Chats that meet the minimum amount
+        if (!isSuperChat || superChatAmount < settings.MinSuperChatAmount)
         {
             return;
         }
-        
-        // Check cooldown
-        if (IsOnCooldown(username, settings.CooldownSeconds))
-        {
-            _logger.LogInformation("[YouTube] User {Username} is on cooldown", username);
-            return;
-        }
-        
-        // Filter URLs if not moderator
-        var filteredPrompt = FilterUrls(messageText, isMod, _settingsService.Settings.Safety);
-        
-        // Generate and queue the code
+
+        _logger.LogInformation("[YouTube] Super Chat from {Username}: ${Amount} - Adding credits",
+            username, superChatAmount);
+
+        // Add credits to user account (Super Chat amount = credits)
         try
         {
-            var (executionCode, undoCode) = await _codeGenerator.GenerateCodeAsync(filteredPrompt);
-            
-            // Check for dangerous code patterns
-            if (ContainsDangerousPatterns(executionCode))
-            {
-                _logger.LogWarning("[YouTube] Blocked dangerous code from {Username}", username);
-                return;
-            }
-            
-            _commandQueue.AddCommand(
-                filteredPrompt,
-                executionCode,
-                undoCode,
-                "youtube",
-                username);
-            
-            SetCooldown(username);
-            _logger.LogInformation("[YouTube] Command queued from {Username}: {Prompt}", username, filteredPrompt);
+            _userService.AddCredits(channelId, superChatAmount, $"YouTube Super Chat: ${superChatAmount}");
+            _logger.LogInformation("[YouTube] Added {Amount} credits to {Username} ({ChannelId})",
+                superChatAmount, username, channelId);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[YouTube] Failed to process command from {Username}", username);
+            _logger.LogError(ex, "[YouTube] Failed to add credits for {Username}", username);
         }
     }
-    
+
     private bool IsOnCooldown(string username, int cooldownSeconds)
     {
         if (_cooldowns.TryGetValue(username.ToLowerInvariant(), out var lastCommand))
@@ -281,23 +247,23 @@ public partial class YouTubeService : IDisposable
         }
         return false;
     }
-    
+
     private void SetCooldown(string username)
     {
         _cooldowns[username.ToLowerInvariant()] = DateTime.UtcNow;
     }
-    
+
     private static string FilterUrls(string message, bool isMod, SafetySettings safety)
     {
         if (!safety.BlockUrls || isMod)
         {
             return message;
         }
-        
+
         var urlPattern = UrlRegex();
         var matches = urlPattern.Matches(message);
         var filtered = message;
-        
+
         foreach (Match match in matches)
         {
             var url = match.Value;
@@ -305,10 +271,10 @@ public partial class YouTubeService : IDisposable
             {
                 var uri = new Uri(url);
                 var domain = uri.Host.ToLowerInvariant();
-                
+
                 var isAllowed = safety.AllowedDomains.Any(d =>
                     domain.Contains(d, StringComparison.OrdinalIgnoreCase));
-                
+
                 if (!isAllowed)
                 {
                     filtered = filtered.Replace(url, "[URL REMOVED]");
@@ -319,10 +285,10 @@ public partial class YouTubeService : IDisposable
                 filtered = filtered.Replace(url, "[URL REMOVED]");
             }
         }
-        
+
         return filtered;
     }
-    
+
     private static bool ContainsDangerousPatterns(string code)
     {
         var dangerousPatterns = new[]
@@ -332,14 +298,14 @@ public partial class YouTubeService : IDisposable
             @"RunConsoleCommand.*'map'",
             @"game\.ConsoleCommand.*map"
         };
-        
+
         return dangerousPatterns.Any(pattern =>
             Regex.IsMatch(code, pattern, RegexOptions.IgnoreCase));
     }
-    
+
     [GeneratedRegex(@"http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+")]
     private static partial Regex UrlRegex();
-    
+
     public void Dispose()
     {
         StopListening();

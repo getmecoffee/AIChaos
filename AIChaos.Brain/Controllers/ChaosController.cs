@@ -18,7 +18,7 @@ public class ChaosController : ControllerBase
     private readonly TestClientService _testClientService;
     private readonly AgenticGameService _agenticService;
     private readonly ILogger<ChaosController> _logger;
-    
+
     public ChaosController(
         CommandQueueService commandQueue,
         AiCodeGeneratorService codeGenerator,
@@ -36,7 +36,7 @@ public class ChaosController : ControllerBase
         _agenticService = agenticService;
         _logger = logger;
     }
-    
+
     /// <summary>
     /// Polls for the next command in the queue (called by GMod).
     /// If test client mode is enabled, only returns commands that passed testing.
@@ -48,13 +48,13 @@ public class ChaosController : ControllerBase
     {
         // Log incoming request for debugging
         _logger.LogDebug("Poll request received from {RemoteIp}", HttpContext.Connection.RemoteIpAddress);
-        
+
         // Check for timed out tests
         _testClientService.CheckTimeouts();
-        
+
         // Add ngrok bypass header in response
         Response.Headers.Append("ngrok-skip-browser-warning", "true");
-        
+
         // If test client mode is enabled, check for approved commands first
         if (_testClientService.IsEnabled)
         {
@@ -69,7 +69,7 @@ public class ChaosController : ControllerBase
                     CommandId = approvedResult.Value.CommandId
                 };
             }
-            
+
             // No approved commands, return empty
             return new PollResponse
             {
@@ -78,13 +78,13 @@ public class ChaosController : ControllerBase
                 CommandId = null
             };
         }
-        
+
         // Test client mode is disabled, use normal queue
         var result = _commandQueue.PollNextCommand();
-        
+
         // Add ngrok bypass header in response (helps with some ngrok configurations)
         Response.Headers.Append("ngrok-skip-browser-warning", "true");
-        
+
         if (result.HasValue)
         {
             return new PollResponse
@@ -94,7 +94,7 @@ public class ChaosController : ControllerBase
                 CommandId = result.Value.CommandId
             };
         }
-        
+
         return new PollResponse
         {
             HasCode = false,
@@ -102,7 +102,7 @@ public class ChaosController : ControllerBase
             CommandId = null
         };
     }
-    
+
     /// <summary>
     /// Reports execution result from GMod (success or error).
     /// </summary>
@@ -113,11 +113,11 @@ public class ChaosController : ControllerBase
         if (request.CommandId < 0)
         {
             var handled = await _agenticService.ReportResultAsync(
-                request.CommandId, 
-                request.Success, 
-                request.Error, 
+                request.CommandId,
+                request.Success,
+                request.Error,
                 request.ResultData);
-            
+
             if (handled)
             {
                 _logger.LogInformation("[AGENTIC] Reported result for command #{CommandId}", request.CommandId);
@@ -129,19 +129,19 @@ public class ChaosController : ControllerBase
                 });
             }
         }
-        
+
         if (request.CommandId <= 0)
         {
             return Ok(new ApiResponse { Status = "ignored", Message = "No command ID to report" });
         }
-        
+
         // Check if this is a regular command that's also part of an agentic session
         var agenticHandled = await _agenticService.ReportResultAsync(
-            request.CommandId, 
-            request.Success, 
-            request.Error, 
+            request.CommandId,
+            request.Success,
+            request.Error,
             request.ResultData);
-        
+
         if (_commandQueue.ReportExecutionResult(request.CommandId, request.Success, request.Error))
         {
             if (request.Success)
@@ -152,7 +152,7 @@ public class ChaosController : ControllerBase
             {
                 _logger.LogWarning("[ERROR] Command #{CommandId} failed: {Error}", request.CommandId, request.Error);
             }
-            
+
             return Ok(new ApiResponse
             {
                 Status = "success",
@@ -160,14 +160,14 @@ public class ChaosController : ControllerBase
                 CommandId = request.CommandId
             });
         }
-        
+
         return NotFound(new ApiResponse
         {
             Status = "error",
             Message = "Command not found in history"
         });
     }
-    
+
     /// <summary>
     /// Polls for the next command to test (called by test client GMod instance).
     /// </summary>
@@ -176,20 +176,20 @@ public class ChaosController : ControllerBase
     public ActionResult<TestPollResponse> PollTest()
     {
         _logger.LogDebug("Test client poll received from {RemoteIp}", HttpContext.Connection.RemoteIpAddress);
-        
+
         Response.Headers.Append("ngrok-skip-browser-warning", "true");
-        
+
         var result = _testClientService.PollTestCommand();
-        
+
         if (result != null)
         {
             return Ok(result);
         }
-        
+
         // Return 204 No Content when there's nothing to test
         return NoContent();
     }
-    
+
     /// <summary>
     /// Reports test result from test client GMod instance.
     /// If the test fails, AI will attempt to fix the code and retry.
@@ -198,7 +198,7 @@ public class ChaosController : ControllerBase
     public async Task<ActionResult<ApiResponse>> ReportTestResult([FromBody] TestResultRequest request)
     {
         var action = await _testClientService.ReportTestResultAsync(request.CommandId, request.Success, request.Error);
-        
+
         string message = action switch
         {
             TestResultAction.Approved => "Test passed - command queued for main client",
@@ -206,7 +206,7 @@ public class ChaosController : ControllerBase
             TestResultAction.Retrying => "Test failed - AI is fixing the code and will retry",
             _ => "Unknown command"
         };
-        
+
         if (action == TestResultAction.Approved)
         {
             _logger.LogInformation("[TEST CLIENT] Command #{CommandId} approved", request.CommandId);
@@ -219,7 +219,7 @@ public class ChaosController : ControllerBase
         {
             _logger.LogInformation("[TEST CLIENT] Command #{CommandId} failed, AI is fixing and will retry", request.CommandId);
         }
-        
+
         return Ok(new ApiResponse
         {
             Status = action == TestResultAction.Unknown ? "error" : "success",
@@ -227,7 +227,7 @@ public class ChaosController : ControllerBase
             CommandId = request.CommandId
         });
     }
-    
+
     /// <summary>
     /// Triggers a new chaos command.
     /// </summary>
@@ -242,9 +242,9 @@ public class ChaosController : ControllerBase
                 Message = "No prompt provided"
             });
         }
-        
+
         var isPrivateDiscordMode = _settingsService.Settings.Safety.PrivateDiscordMode;
-        
+
         // Check for images in the prompt - queue for moderation if found (skip if Private Discord Mode)
         if (!isPrivateDiscordMode && _moderationService.NeedsModeration(request.Prompt))
         {
@@ -258,10 +258,10 @@ public class ChaosController : ControllerBase
                     request.Author ?? "anonymous",
                     request.UserId);
             }
-            
-            _logger.LogInformation("[MODERATION] Prompt with {Count} image(s) queued for review: {Prompt}", 
+
+            _logger.LogInformation("[MODERATION] Prompt with {Count} image(s) queued for review: {Prompt}",
                 imageUrls.Count, request.Prompt);
-            
+
             return Ok(new TriggerResponse
             {
                 Status = "pending_moderation",
@@ -269,7 +269,7 @@ public class ChaosController : ControllerBase
                 WasBlocked = false
             });
         }
-        
+
         // Check for changelevel attempts (skip if Private Discord Mode is enabled)
         if (!isPrivateDiscordMode)
         {
@@ -284,18 +284,18 @@ public class ChaosController : ControllerBase
                 });
             }
         }
-        
+
         _logger.LogInformation("Generating code for: {Prompt}", request.Prompt);
-        
+
         // Generate code
         var (executionCode, undoCode) = await _codeGenerator.GenerateCodeAsync(request.Prompt);
-        
+
         // Post-generation safety check (skip if Private Discord Mode is enabled)
         if (!isPrivateDiscordMode)
         {
             var dangerousPatterns = new[] { "changelevel", "RunConsoleCommand.*\"map\"", "game.ConsoleCommand.*map" };
-            if (dangerousPatterns.Any(p => 
-                System.Text.RegularExpressions.Regex.IsMatch(executionCode, p, 
+            if (dangerousPatterns.Any(p =>
+                System.Text.RegularExpressions.Regex.IsMatch(executionCode, p,
                     System.Text.RegularExpressions.RegexOptions.IgnoreCase)))
             {
                 _logger.LogWarning("[SAFETY] AI tried to generate changelevel code - blocking!");
@@ -306,10 +306,10 @@ public class ChaosController : ControllerBase
                 });
             }
         }
-        
+
         // Determine if we should queue for immediate execution or route through test client
         var isTestClientModeEnabled = _testClientService.IsEnabled;
-        
+
         // Add to history (queue for execution only if test client mode is disabled)
         var entry = _commandQueue.AddCommand(
             request.Prompt,
@@ -321,14 +321,14 @@ public class ChaosController : ControllerBase
             request.UserId,
             null,
             queueForExecution: !isTestClientModeEnabled);
-        
+
         // If test client mode is enabled, queue for testing instead of direct execution
         if (isTestClientModeEnabled)
         {
             _testClientService.QueueForTesting(entry.Id, executionCode, request.Prompt);
             _logger.LogInformation("[TEST CLIENT] Command #{CommandId} queued for AI-driven testing", entry.Id);
         }
-        
+
         return Ok(new TriggerResponse
         {
             Status = isTestClientModeEnabled ? "testing" : "queued",
@@ -339,7 +339,7 @@ public class ChaosController : ControllerBase
             AiResponse = entry.AiResponse
         });
     }
-    
+
     /// <summary>
     /// Gets command history and preferences.
     /// </summary>
@@ -352,7 +352,7 @@ public class ChaosController : ControllerBase
             Preferences = _commandQueue.Preferences
         });
     }
-    
+
     /// <summary>
     /// Gets command history for a specific user (filtered by userId).
     /// </summary>
@@ -365,7 +365,7 @@ public class ChaosController : ControllerBase
             Preferences = _commandQueue.Preferences
         });
     }
-    
+
     /// <summary>
     /// Repeats a previous command.
     /// </summary>
@@ -382,14 +382,14 @@ public class ChaosController : ControllerBase
                 CommandId = request.CommandId
             });
         }
-        
+
         return NotFound(new ApiResponse
         {
             Status = "error",
             Message = "Command not found in history"
         });
     }
-    
+
     /// <summary>
     /// Undoes a previous command.
     /// </summary>
@@ -406,14 +406,14 @@ public class ChaosController : ControllerBase
                 CommandId = request.CommandId
             });
         }
-        
+
         return NotFound(new ApiResponse
         {
             Status = "error",
             Message = "Command not found in history"
         });
     }
-    
+
     /// <summary>
     /// Force undoes a command using AI.
     /// </summary>
@@ -429,12 +429,12 @@ public class ChaosController : ControllerBase
                 Message = "Command not found in history"
             });
         }
-        
+
         _logger.LogInformation("[FORCE UNDO] Generating AI solution for command #{CommandId}", request.CommandId);
-        
+
         var forceUndoCode = await _codeGenerator.GenerateForceUndoAsync(command);
         _commandQueue.QueueCode(forceUndoCode);
-        
+
         return Ok(new ApiResponse
         {
             Status = "success",
@@ -442,7 +442,7 @@ public class ChaosController : ControllerBase
             CommandId = request.CommandId
         });
     }
-    
+
     /// <summary>
     /// Updates user preferences.
     /// </summary>
@@ -454,16 +454,16 @@ public class ChaosController : ControllerBase
         _commandQueue.Preferences.MaxHistoryLength = prefs.MaxHistoryLength;
         _commandQueue.Preferences.InteractiveModeEnabled = prefs.InteractiveModeEnabled;
         _commandQueue.Preferences.InteractiveMaxIterations = prefs.InteractiveMaxIterations;
-        
+
         _logger.LogInformation("[PREFERENCES] Updated preferences");
-        
+
         return Ok(new
         {
             status = "success",
             preferences = _commandQueue.Preferences
         });
     }
-    
+
     /// <summary>
     /// Clears command history.
     /// </summary>
@@ -472,14 +472,14 @@ public class ChaosController : ControllerBase
     {
         _commandQueue.ClearHistory();
         _logger.LogInformation("[HISTORY] Command history cleared");
-        
+
         return Ok(new ApiResponse
         {
             Status = "success",
             Message = "History cleared"
         });
     }
-    
+
     /// <summary>
     /// Saves a command payload for random chaos mode.
     /// </summary>
@@ -495,10 +495,10 @@ public class ChaosController : ControllerBase
                 Message = "Command not found in history"
             });
         }
-        
+
         var payload = _commandQueue.SavePayload(command, request.Name);
         _logger.LogInformation("[SAVED PAYLOAD] Saved command #{CommandId} as '{Name}'", request.CommandId, request.Name);
-        
+
         return Ok(new ApiResponse
         {
             Status = "success",
@@ -506,7 +506,7 @@ public class ChaosController : ControllerBase
             CommandId = payload.Id
         });
     }
-    
+
     /// <summary>
     /// Gets all saved payloads.
     /// </summary>
@@ -518,7 +518,7 @@ public class ChaosController : ControllerBase
             Payloads = _commandQueue.GetSavedPayloads()
         });
     }
-    
+
     /// <summary>
     /// Deletes a saved payload.
     /// </summary>
@@ -534,14 +534,14 @@ public class ChaosController : ControllerBase
                 Message = "Payload deleted"
             });
         }
-        
+
         return NotFound(new ApiResponse
         {
             Status = "error",
             Message = "Payload not found"
         });
     }
-    
+
     /// <summary>
     /// Triggers an interactive AI session that can iterate with the game.
     /// This is a legacy endpoint that now uses the unified AgenticGameService.
@@ -557,9 +557,9 @@ public class ChaosController : ControllerBase
                 Message = "No prompt provided"
             });
         }
-        
+
         _logger.LogInformation("[INTERACTIVE] Starting interactive session for: {Prompt}", request.Prompt);
-        
+
         // Convert to AgentSessionRequest and use AgenticGameService
         var agentRequest = new AgentSessionRequest
         {
@@ -568,14 +568,14 @@ public class ChaosController : ControllerBase
             MaxIterations = request.MaxIterations,
             UseTestClient = false // Interactive mode uses main client
         };
-        
+
         var session = await _agenticService.CreateSessionAsync(agentRequest);
-        
+
         return Ok(new InteractiveSessionResponse
         {
             Status = session.IsComplete ? (session.WasSuccessful ? "complete" : "failed") : "in_progress",
-            Message = session.IsComplete 
-                ? (session.WasSuccessful ? "Session completed successfully" : "Session failed") 
+            Message = session.IsComplete
+                ? (session.WasSuccessful ? "Session completed successfully" : "Session failed")
                 : "Session started - waiting for game response",
             SessionId = session.Id,
             Iteration = session.CurrentIteration,
@@ -594,7 +594,7 @@ public class ChaosController : ControllerBase
             }).ToList()
         });
     }
-    
+
     /// <summary>
     /// Gets the status of an interactive session.
     /// This is a legacy endpoint that now uses the unified AgenticGameService.
@@ -603,7 +603,7 @@ public class ChaosController : ControllerBase
     public ActionResult<InteractiveSessionResponse> GetInteractiveSession(int sessionId)
     {
         var session = _agenticService.GetSession(sessionId);
-        
+
         if (session == null)
         {
             return NotFound(new InteractiveSessionResponse
@@ -612,7 +612,7 @@ public class ChaosController : ControllerBase
                 Message = "Session not found"
             });
         }
-        
+
         return Ok(new InteractiveSessionResponse
         {
             Status = session.IsComplete ? (session.WasSuccessful ? "complete" : "failed") : "in_progress",
@@ -633,7 +633,7 @@ public class ChaosController : ControllerBase
             }).ToList()
         });
     }
-    
+
     /// <summary>
     /// Gets all active interactive sessions.
     /// This is a legacy endpoint that now uses the unified AgenticGameService.
@@ -642,7 +642,7 @@ public class ChaosController : ControllerBase
     public ActionResult<object> GetActiveInteractiveSessions()
     {
         var sessions = _agenticService.GetActiveSessions();
-        
+
         return Ok(new
         {
             count = sessions.Count,
@@ -657,11 +657,11 @@ public class ChaosController : ControllerBase
             })
         });
     }
-    
+
     // ==========================================
     // UNIFIED AGENTIC GAME SERVICE ENDPOINTS
     // ==========================================
-    
+
     /// <summary>
     /// Triggers an agentic AI session that can iterate with the game.
     /// Supports both main client and test client modes.
@@ -677,17 +677,17 @@ public class ChaosController : ControllerBase
                 Message = "No prompt provided"
             });
         }
-        
-        _logger.LogInformation("[AGENT] Starting agentic session for: {Prompt} (UseTestClient: {UseTestClient})", 
+
+        _logger.LogInformation("[AGENT] Starting agentic session for: {Prompt} (UseTestClient: {UseTestClient})",
             request.Prompt, request.UseTestClient);
-        
+
         var session = await _agenticService.CreateSessionAsync(request);
-        
+
         return Ok(new AgentSessionResponse
         {
             Status = session.IsComplete ? (session.WasSuccessful ? "complete" : "failed") : "in_progress",
-            Message = session.IsComplete 
-                ? (session.WasSuccessful ? "Session completed successfully" : "Session failed") 
+            Message = session.IsComplete
+                ? (session.WasSuccessful ? "Session completed successfully" : "Session failed")
                 : "Session started - waiting for game response",
             SessionId = session.Id,
             Mode = session.Mode.ToString(),
@@ -707,7 +707,7 @@ public class ChaosController : ControllerBase
             }).ToList()
         });
     }
-    
+
     /// <summary>
     /// Gets the status of an agentic session.
     /// </summary>
@@ -715,7 +715,7 @@ public class ChaosController : ControllerBase
     public ActionResult<AgentSessionResponse> GetAgentSession(int sessionId)
     {
         var session = _agenticService.GetSession(sessionId);
-        
+
         if (session == null)
         {
             return NotFound(new AgentSessionResponse
@@ -724,7 +724,7 @@ public class ChaosController : ControllerBase
                 Message = "Session not found"
             });
         }
-        
+
         return Ok(new AgentSessionResponse
         {
             Status = session.IsComplete ? (session.WasSuccessful ? "complete" : "failed") : "in_progress",
@@ -746,7 +746,7 @@ public class ChaosController : ControllerBase
             }).ToList()
         });
     }
-    
+
     /// <summary>
     /// Gets all active agentic sessions.
     /// </summary>
@@ -754,7 +754,7 @@ public class ChaosController : ControllerBase
     public ActionResult<object> GetActiveAgentSessions()
     {
         var sessions = _agenticService.GetActiveSessions();
-        
+
         return Ok(new
         {
             count = sessions.Count,
@@ -772,7 +772,7 @@ public class ChaosController : ControllerBase
             })
         });
     }
-    
+
     /// <summary>
     /// Gets the test queue status from the agentic service.
     /// </summary>
@@ -780,5 +780,16 @@ public class ChaosController : ControllerBase
     public ActionResult<TestQueueStatus> GetAgentQueueStatus()
     {
         return Ok(_agenticService.GetQueueStatus());
+    }
+    /// <summary>
+    /// Gets public authentication configuration (Client IDs).
+    /// </summary>
+    [HttpGet("api/auth/config")]
+    public ActionResult GetAuthConfig()
+    {
+        return Ok(new
+        {
+            googleClientId = _settingsService.Settings.YouTube.ClientId
+        });
     }
 }
