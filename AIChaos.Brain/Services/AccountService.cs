@@ -242,6 +242,38 @@ public class AccountService
     }
 
     /// <summary>
+    /// Directly links a YouTube channel to an account (used for OAuth linking).
+    /// </summary>
+    public bool LinkYouTubeChannel(string accountId, string youtubeChannelId)
+    {
+        if (!_accounts.TryGetValue(accountId, out var account))
+        {
+            return false;
+        }
+        
+        // Check if this YouTube channel is already linked to another account
+        if (_youtubeIndex.ContainsKey(youtubeChannelId))
+        {
+            return false;
+        }
+        
+        lock (account)
+        {
+            account.LinkedYouTubeChannelId = youtubeChannelId;
+            account.PendingVerificationCode = null;
+            account.VerificationCodeExpiresAt = null;
+        }
+        
+        _youtubeIndex[youtubeChannelId] = accountId;
+        SaveAccounts();
+        
+        _logger.LogInformation("[ACCOUNT] Linked YouTube channel {ChannelId} to account {AccountId}", 
+            youtubeChannelId, accountId);
+        
+        return true;
+    }
+
+    /// <summary>
     /// Gets an account by YouTube Channel ID.
     /// </summary>
     public Account? GetAccountByYouTubeChannel(string youtubeChannelId)

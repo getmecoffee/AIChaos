@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Chaos - Viewer Control</title>
     <link rel="stylesheet" href="/css/style.css">
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <style>
         .user-profile {
             display: flex;
@@ -187,17 +188,36 @@
                 <h3>📺 Link Your YouTube Channel</h3>
                 <p style="color: var(--text-dim);">To receive credits from Super Chats, you need to link your YouTube channel.</p>
                 
-                <div id="linkStep1">
-                    <p><strong>Step 1:</strong> Click the button below to generate a verification code.</p>
-                    <button onclick="generateLinkCode()">🎫 Generate Code</button>
+                <!-- Method Selection -->
+                <div id="linkMethodSelect" style="margin: 15px 0;">
+                    <p><strong>Choose a method:</strong></p>
+                    <div style="display: flex; gap: 10px; margin-top: 10px;">
+                        <button onclick="showOAuthLinkMethod()" class="auth-tab" id="oauthMethodBtn">🔐 Google Sign-In</button>
+                        <button onclick="showCodeLinkMethod()" class="auth-tab" id="codeMethodBtn">🎫 Verification Code</button>
+                    </div>
                 </div>
                 
-                <div id="linkStep2" class="hidden" style="margin-top: 15px;">
-                    <p><strong>Step 2:</strong> Send a Super Chat on the stream containing this code:</p>
-                    <div style="padding: 15px; background: #000; border-radius: 8px; text-align: center; margin: 10px 0;">
-                        <span id="linkCode" style="font-size: 24px; font-weight: bold; color: var(--success); letter-spacing: 3px;"></span>
+                <!-- OAuth Method -->
+                <div id="linkOAuthMethod" class="hidden" style="margin-top: 15px;">
+                    <p style="color: var(--text-dim); margin-bottom: 10px;">Sign in with Google to instantly link your YouTube channel:</p>
+                    <div id="g_id_link_signin"></div>
+                    <p id="oauthNotConfigured" class="hidden" style="color: var(--warning); margin-top: 10px;">⚠️ Google OAuth not configured. Use the verification code method instead.</p>
+                </div>
+                
+                <!-- Verification Code Method -->
+                <div id="linkCodeMethod" class="hidden" style="margin-top: 15px;">
+                    <div id="linkStep1">
+                        <p><strong>Step 1:</strong> Click the button below to generate a verification code.</p>
+                        <button onclick="generateLinkCode()">🎫 Generate Code</button>
                     </div>
-                    <p style="color: var(--text-dim); font-size: 12px;">The code expires in 30 minutes. Once your Super Chat with the code is detected, your account will be linked automatically!</p>
+                    
+                    <div id="linkStep2" class="hidden" style="margin-top: 15px;">
+                        <p><strong>Step 2:</strong> Send a Super Chat on the stream containing this code:</p>
+                        <div style="padding: 15px; background: #000; border-radius: 8px; text-align: center; margin: 10px 0;">
+                            <span id="linkCode" style="font-size: 24px; font-weight: bold; color: var(--success); letter-spacing: 3px;"></span>
+                        </div>
+                        <p style="color: var(--text-dim); font-size: 12px;">The code expires in 30 minutes. Once your Super Chat with the code is detected, your account will be linked automatically!</p>
+                    </div>
                 </div>
                 
                 <div id="linkStatus" style="margin-top: 10px;"></div>
@@ -346,11 +366,101 @@
             document.querySelectorAll('.auth-tab')[1].classList.add('active');
         }
         
+        let googleClientIdForLink = null;
+        
         function showLinkYouTubeModal() {
             document.getElementById('linkYouTubeModal').classList.add('active');
+            document.getElementById('linkMethodSelect').classList.remove('hidden');
+            document.getElementById('linkOAuthMethod').classList.add('hidden');
+            document.getElementById('linkCodeMethod').classList.add('hidden');
             document.getElementById('linkStep1').classList.remove('hidden');
             document.getElementById('linkStep2').classList.add('hidden');
             document.getElementById('linkStatus').textContent = '';
+            
+            // Reset method buttons
+            document.getElementById('oauthMethodBtn').classList.remove('active');
+            document.getElementById('codeMethodBtn').classList.remove('active');
+            
+            // Check if OAuth is configured
+            checkOAuthAvailability();
+        }
+        
+        async function checkOAuthAvailability() {
+            try {
+                const res = await fetch('/api/auth/config');
+                const config = await res.json();
+                googleClientIdForLink = config.googleClientId;
+            } catch (err) {
+                console.error("Failed to check OAuth config", err);
+            }
+        }
+        
+        function showOAuthLinkMethod() {
+            document.getElementById('linkMethodSelect').classList.add('hidden');
+            document.getElementById('linkOAuthMethod').classList.remove('hidden');
+            document.getElementById('linkCodeMethod').classList.add('hidden');
+            document.getElementById('oauthMethodBtn').classList.add('active');
+            document.getElementById('codeMethodBtn').classList.remove('active');
+            
+            if (googleClientIdForLink) {
+                // Initialize Google Sign-In for linking
+                document.getElementById('oauthNotConfigured').classList.add('hidden');
+                initGoogleSignInForLink();
+            } else {
+                document.getElementById('oauthNotConfigured').classList.remove('hidden');
+                document.getElementById('g_id_link_signin').innerHTML = '';
+            }
+        }
+        
+        function showCodeLinkMethod() {
+            document.getElementById('linkMethodSelect').classList.add('hidden');
+            document.getElementById('linkOAuthMethod').classList.add('hidden');
+            document.getElementById('linkCodeMethod').classList.remove('hidden');
+            document.getElementById('oauthMethodBtn').classList.remove('active');
+            document.getElementById('codeMethodBtn').classList.add('active');
+        }
+        
+        function initGoogleSignInForLink() {
+            if (!googleClientIdForLink) return;
+            
+            google.accounts.id.initialize({
+                client_id: googleClientIdForLink,
+                callback: handleGoogleLinkResponse,
+                auto_select: false
+            });
+            
+            google.accounts.id.renderButton(
+                document.getElementById("g_id_link_signin"),
+                { theme: "outline", size: "large", text: "signin_with" }
+            );
+        }
+        
+        async function handleGoogleLinkResponse(response) {
+            // Send the full credential to the server for verification
+            try {
+                const res = await fetch('/api/account/link-youtube/google', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-Session-Token': sessionToken 
+                    },
+                    body: JSON.stringify({ credential: response.credential })
+                });
+                const data = await res.json();
+                
+                if (data.status === 'success') {
+                    document.getElementById('linkStatus').innerHTML = '<div class="alert alert-success">✓ YouTube channel linked successfully!</div>';
+                    // Update the current account
+                    currentAccount.linkedYouTube = data.linkedYouTube;
+                    // Refresh account info
+                    await checkSession();
+                    setTimeout(closeLinkYouTubeModal, 2000);
+                } else {
+                    document.getElementById('linkStatus').innerHTML = `<div class="alert alert-error">${data.message}</div>`;
+                }
+            } catch (err) {
+                document.getElementById('linkStatus').innerHTML = '<div class="alert alert-error">Network error</div>';
+            }
         }
         
         function closeLinkYouTubeModal() {
