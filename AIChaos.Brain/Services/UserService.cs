@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Security.Cryptography;
 using System.Text.Json;
 using AIChaos.Brain.Models;
 
@@ -12,10 +13,12 @@ public class UserService
     private readonly string _usersPath;
     private readonly ILogger<UserService> _logger;
     private readonly ConcurrentDictionary<string, User> _users = new();
+    private readonly ConcurrentDictionary<string, PendingVerification> _pendingVerifications = new();
     private readonly object _lock = new();
 
-    // Configurable settings (could be moved to SettingsService later)
+    // Configurable settings
     private const int DEFAULT_RATE_LIMIT_SECONDS = 20;
+    private const int VERIFICATION_EXPIRY_MINUTES = 30;
 
     public UserService(ILogger<UserService> logger)
     {
@@ -38,7 +41,7 @@ public class UserService
                 Platform = platform,
                 CreditBalance = 0
             };
-            SaveUsers(); // Save immediately on creation
+            SaveUsers();
             return user;
         });
     }
@@ -65,13 +68,138 @@ public class UserService
         lock (user)
         {
             user.CreditBalance += amount;
-            // Update display name in case it changed
             user.DisplayName = displayName;
         }
 
         SaveUsers();
         _logger.LogInformation("[USER] Added ${Amount} to {User} ({Id}). New Balance: ${Balance}",
             amount, displayName, userId, user.CreditBalance);
+    }
+    
+    /// <summary>
+    /// Generates a verification code for a Channel ID.
+    /// User must send a Super Chat containing this code to verify ownership.
+    /// </summary>
+    public string GenerateVerificationCode(string channelId)
+    {
+        // Clean up expired verifications
+        CleanupExpiredVerifications();
+        
+        // Check if there's already a pending verification for this channel
+        if (_pendingVerifications.TryGetValue(channelId, out var existing) && existing.ExpiresAt > DateTime.UtcNow)
+        {
+            return existing.VerificationCode;
+        }
+        
+        // Generate new code
+        var code = "VERIFY-" + GenerateRandomCode(4);
+        var verification = new PendingVerification
+        {
+            ChannelId = channelId,
+            VerificationCode = code,
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddMinutes(VERIFICATION_EXPIRY_MINUTES)
+        };
+        
+        _pendingVerifications[channelId] = verification;
+        _logger.LogInformation("[VERIFY] Generated code {Code} for Channel {ChannelId}", code, channelId);
+        
+        return code;
+    }
+    
+    /// <summary>
+    /// Checks if a Super Chat message contains a valid verification code.
+    /// Called by YouTubeService when processing Super Chats.
+    /// </summary>
+    public bool CheckAndVerifyFromSuperChat(string channelId, string message)
+    {
+        if (!_pendingVerifications.TryGetValue(channelId, out var verification))
+        {
+            return false;
+        }
+        
+        if (verification.ExpiresAt < DateTime.UtcNow)
+        {
+            _pendingVerifications.TryRemove(channelId, out _);
+            return false;
+        }
+        
+        // Check if message contains the verification code (case-insensitive)
+        if (message.Contains(verification.VerificationCode, StringComparison.OrdinalIgnoreCase))
+        {
+            // Verify the user!
+            var user = GetOrCreateUser(channelId, "Verified User");
+            lock (user)
+            {
+                user.IsVerified = true;
+            }
+            SaveUsers();
+            
+            // Remove the pending verification
+            _pendingVerifications.TryRemove(channelId, out _);
+            
+            _logger.LogInformation("[VERIFY] Channel {ChannelId} verified via Super Chat!", channelId);
+            return true;
+        }
+        
+        return false;
+    }
+    
+    /// <summary>
+    /// Checks if a user is verified.
+    /// </summary>
+    public bool IsUserVerified(string userId)
+    {
+        if (_users.TryGetValue(userId, out var user))
+        {
+            return user.IsVerified;
+        }
+        return false;
+    }
+    
+    /// <summary>
+    /// Gets verification status for a channel ID.
+    /// </summary>
+    public (bool HasCredits, bool IsVerified, decimal Balance, string? PendingCode) GetVerificationStatus(string channelId)
+    {
+        var user = GetUser(channelId);
+        string? pendingCode = null;
+        
+        if (_pendingVerifications.TryGetValue(channelId, out var verification) && verification.ExpiresAt > DateTime.UtcNow)
+        {
+            pendingCode = verification.VerificationCode;
+        }
+        
+        return (
+            HasCredits: user != null && user.CreditBalance > 0,
+            IsVerified: user?.IsVerified ?? false,
+            Balance: user?.CreditBalance ?? 0,
+            PendingCode: pendingCode
+        );
+    }
+    
+    private static string GenerateRandomCode(int length)
+    {
+        const string chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+        var code = new char[length];
+        for (int i = 0; i < length; i++)
+        {
+            code[i] = chars[RandomNumberGenerator.GetInt32(chars.Length)];
+        }
+        return new string(code);
+    }
+    
+    private void CleanupExpiredVerifications()
+    {
+        var expired = _pendingVerifications
+            .Where(kv => kv.Value.ExpiresAt < DateTime.UtcNow)
+            .Select(kv => kv.Key)
+            .ToList();
+            
+        foreach (var key in expired)
+        {
+            _pendingVerifications.TryRemove(key, out _);
+        }
     }
 
     /// <summary>

@@ -16,6 +16,7 @@ public partial class YouTubeService : IDisposable
     private readonly CommandQueueService _commandQueue;
     private readonly AiCodeGeneratorService _codeGenerator;
     private readonly UserService _userService;
+    private readonly AccountService _accountService;
     private readonly ILogger<YouTubeService> _logger;
 
     private Google.Apis.YouTube.v3.YouTubeService? _youtubeService;
@@ -32,12 +33,14 @@ public partial class YouTubeService : IDisposable
         CommandQueueService commandQueue,
         AiCodeGeneratorService codeGenerator,
         UserService userService,
+        AccountService accountService,
         ILogger<YouTubeService> logger)
     {
         _settingsService = settingsService;
         _commandQueue = commandQueue;
         _codeGenerator = codeGenerator;
         _userService = userService;
+        _accountService = accountService;
         _logger = logger;
     }
 
@@ -223,15 +226,37 @@ public partial class YouTubeService : IDisposable
             return;
         }
 
-        _logger.LogInformation("[YouTube] Super Chat from {Username}: ${Amount} - Adding credits",
-            username, superChatAmount);
+        _logger.LogInformation("[YouTube] Super Chat from {Username} ({ChannelId}): ${Amount}",
+            username, channelId, superChatAmount);
 
-        // Add credits to user account (Super Chat amount = credits)
+        // Check if this Super Chat contains a verification code for account linking
+        var (linked, existingAccountId) = _accountService.CheckAndLinkFromSuperChat(channelId, messageText, username);
+        
+        if (linked)
+        {
+            _logger.LogInformation("[YouTube] Channel {ChannelId} linked to account via Super Chat!", channelId);
+        }
+        
+        // Add credits to the linked account, or fall back to legacy user system
         try
         {
-            _userService.AddCredits(channelId, superChatAmount, $"YouTube Super Chat: ${superChatAmount}");
-            _logger.LogInformation("[YouTube] Added {Amount} credits to {Username} ({ChannelId})",
-                superChatAmount, username, channelId);
+            // Check if channel is linked to an account
+            var account = _accountService.GetAccountByYouTubeChannel(channelId);
+            
+            if (account != null)
+            {
+                // Add credits to the account
+                _accountService.AddCredits(account.Id, superChatAmount);
+                _logger.LogInformation("[YouTube] Added ${Amount} credits to account {Username}",
+                    superChatAmount, account.Username);
+            }
+            else
+            {
+                // Fall back to legacy user system (for unlinked channels)
+                _userService.AddCredits(channelId, superChatAmount, username);
+                _logger.LogInformation("[YouTube] Added ${Amount} credits to unlinked channel {ChannelId} (legacy)",
+                    superChatAmount, channelId);
+            }
         }
         catch (Exception ex)
         {

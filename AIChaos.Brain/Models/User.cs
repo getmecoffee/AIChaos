@@ -36,4 +36,21 @@ public class User
     /// Platform (youtube, twitch, etc).
     /// </summary>
     public string Platform { get; set; } = "youtube";
+    
+    /// <summary>
+    /// Whether the user has verified ownership of this Channel ID.
+    /// </summary>
+    public bool IsVerified { get; set; } = false;
+}
+
+/// <summary>
+/// Represents a pending verification request.
+/// The user must send a Super Chat containing this code to verify ownership.
+/// </summary>
+public class PendingVerification
+{
+    public string ChannelId { get; set; } = "";
+    public string VerificationCode { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime ExpiresAt { get; set; }
 }

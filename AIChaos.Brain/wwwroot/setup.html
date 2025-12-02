@@ -84,6 +84,33 @@
                 </div>
             </div>
             
+            <!-- Super Chat Simulator -->
+            <div class="card">
+                <h2>💰 Super Chat Simulator</h2>
+                <p style="color: var(--text-dim); margin-bottom: 15px;">
+                    Simulate a YouTube Super Chat to add credits to a user's account for testing.
+                </p>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>User ID (from Google Sign-In)</label>
+                        <input type="text" id="superChatUserId" placeholder="e.g., 123456789012345678901">
+                        <small>The user's Google ID (they can find this in their profile)</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Display Name</label>
+                        <input type="text" id="superChatDisplayName" placeholder="e.g., TestUser">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Amount (USD)</label>
+                    <input type="number" id="superChatAmount" value="5.00" min="0.01" step="0.01" placeholder="5.00">
+                </div>
+                
+                <button onclick="simulateSuperChat()">💵 Simulate Super Chat</button>
+                <div id="superChatResult" style="margin-top: 10px;"></div>
+            </div>
+            
             <!-- OpenRouter API -->
             <div class="card">
                 <h2>
@@ -528,6 +555,45 @@
             } catch (err) {
                 toggle.checked = !enabled; // Revert on failure
                 showAlert('Network error', 'error');
+            }
+        }
+        
+        async function simulateSuperChat() {
+            const userId = document.getElementById('superChatUserId').value.trim();
+            const displayName = document.getElementById('superChatDisplayName').value.trim();
+            const amount = parseFloat(document.getElementById('superChatAmount').value);
+            const resultDiv = document.getElementById('superChatResult');
+            
+            if (!userId) {
+                resultDiv.innerHTML = '<div class="alert alert-error">User ID is required</div>';
+                return;
+            }
+            
+            if (isNaN(amount) || amount <= 0) {
+                resultDiv.innerHTML = '<div class="alert alert-error">Amount must be a positive number</div>';
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/user/simulate-superchat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        userId: userId,
+                        displayName: displayName || 'Simulated User',
+                        amount: amount
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    resultDiv.innerHTML = `<div class="alert alert-success">${data.message}. New balance: $${data.newBalance.toFixed(2)}</div>`;
+                } else {
+                    resultDiv.innerHTML = `<div class="alert alert-error">${data.message}</div>`;
+                }
+            } catch (err) {
+                resultDiv.innerHTML = '<div class="alert alert-error">Network error</div>';
             }
         }
         

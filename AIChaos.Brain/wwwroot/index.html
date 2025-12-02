@@ -6,7 +6,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Chaos - Viewer Control</title>
     <link rel="stylesheet" href="/css/style.css">
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <style>
         .user-profile {
             display: flex;
@@ -90,6 +89,35 @@
         .hidden {
             display: none !important;
         }
+        
+        .auth-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .auth-tab {
+            padding: 8px 16px;
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-dim);
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        
+        .auth-tab.active {
+            background: var(--primary);
+            color: #000;
+            border-color: var(--primary);
+        }
+        
+        .link-youtube-section {
+            margin-top: 15px;
+            padding: 15px;
+            background: rgba(255, 0, 0, 0.1);
+            border: 1px solid #ff0000;
+            border-radius: 8px;
+        }
     </style>
 </head>
 
@@ -98,15 +126,83 @@
         <div class="header">
             <h1>🎮 AI CHAOS VIEWER</h1>
             <div id="authSection">
-                <!-- Google Sign-In Button Container -->
-                <div id="g_id_signin"></div>
+                <button onclick="showLoginModal()" style="padding: 8px 16px;">🔓 Login / Register</button>
             </div>
             <div id="userSection" class="hidden user-profile">
-                <img id="userAvatar" src="" style="width: 30px; height: 30px; border-radius: 50%;">
                 <span id="userName">Guest</span>
                 <span class="credits-display">$ <span id="userCredits">0.00</span></span>
-                <button onclick="signOut()"
+                <button onclick="showLinkYouTubeModal()" title="Link YouTube Channel"
+                    style="background: none; border: none; color: var(--warning); cursor: pointer; font-size: 12px;">📺 Link YouTube</button>
+                <button onclick="logout()"
                     style="background: none; border: none; color: var(--text-dim); cursor: pointer;">(Logout)</button>
+            </div>
+        </div>
+        
+        <!-- Login/Register Modal -->
+        <div id="loginModal" class="modal">
+            <div class="modal-content">
+                <h3>🔐 Account Access</h3>
+                <div class="auth-tabs">
+                    <button class="auth-tab active" onclick="showLoginTab()">Login</button>
+                    <button class="auth-tab" onclick="showRegisterTab()">Register</button>
+                </div>
+                
+                <div id="loginTab">
+                    <div class="form-group">
+                        <label>Username</label>
+                        <input type="text" id="loginUsername" placeholder="Your username" onkeydown="if(event.key==='Enter')doLogin()">
+                    </div>
+                    <div class="form-group">
+                        <label>Password</label>
+                        <input type="password" id="loginPassword" placeholder="Your password" onkeydown="if(event.key==='Enter')doLogin()">
+                    </div>
+                    <div id="loginError" style="color: var(--error); margin: 10px 0;"></div>
+                    <button onclick="doLogin()">🔓 Login</button>
+                </div>
+                
+                <div id="registerTab" class="hidden">
+                    <div class="form-group">
+                        <label>Username (min 3 chars)</label>
+                        <input type="text" id="registerUsername" placeholder="Choose a username">
+                    </div>
+                    <div class="form-group">
+                        <label>Display Name (optional)</label>
+                        <input type="text" id="registerDisplayName" placeholder="How you want to be shown">
+                    </div>
+                    <div class="form-group">
+                        <label>Password (min 4 chars)</label>
+                        <input type="password" id="registerPassword" placeholder="Choose a password">
+                    </div>
+                    <div id="registerError" style="color: var(--error); margin: 10px 0;"></div>
+                    <button onclick="doRegister()">✨ Create Account</button>
+                </div>
+                
+                <button onclick="closeLoginModal()" style="margin-top: 15px; background: transparent; border: 1px solid var(--border);">Cancel</button>
+            </div>
+        </div>
+        
+        <!-- Link YouTube Modal -->
+        <div id="linkYouTubeModal" class="modal">
+            <div class="modal-content">
+                <h3>📺 Link Your YouTube Channel</h3>
+                <p style="color: var(--text-dim);">To receive credits from Super Chats, you need to link your YouTube channel.</p>
+                
+                <div id="linkStep1">
+                    <p><strong>Step 1:</strong> Click the button below to generate a verification code.</p>
+                    <button onclick="generateLinkCode()">🎫 Generate Code</button>
+                </div>
+                
+                <div id="linkStep2" class="hidden" style="margin-top: 15px;">
+                    <p><strong>Step 2:</strong> Send a Super Chat on the stream containing this code:</p>
+                    <div style="padding: 15px; background: #000; border-radius: 8px; text-align: center; margin: 10px 0;">
+                        <span id="linkCode" style="font-size: 24px; font-weight: bold; color: var(--success); letter-spacing: 3px;"></span>
+                    </div>
+                    <p style="color: var(--text-dim); font-size: 12px;">The code expires in 30 minutes. Once your Super Chat with the code is detected, your account will be linked automatically!</p>
+                </div>
+                
+                <div id="linkStatus" style="margin-top: 10px;"></div>
+                
+                <button onclick="closeLinkYouTubeModal()" style="margin-top: 15px; background: transparent; border: 1px solid var(--border);">Close</button>
             </div>
         </div>
         
@@ -119,7 +215,7 @@
         <div class="card">
             <h2>Send Chaos Command</h2>
             <div class="form-group">
-                <textarea id="promptInput" placeholder="Sign in to send commands..."></textarea>
+                <textarea id="promptInput" placeholder="Login to send commands..."></textarea>
             </div>
 
             <div class="form-group" style="margin-bottom: 15px;">
@@ -130,7 +226,7 @@
                 </label>
             </div>
 
-            <button id="sendBtn" onclick="submitCommand()" disabled>🔒 SIGN IN TO PLAY</button>
+            <button id="sendBtn" onclick="submitCommand()" disabled>🔒 LOGIN TO PLAY</button>
             <div id="status" style="margin-top: 15px;"></div>
 
             <!-- Interactive Status UI -->
@@ -186,7 +282,8 @@
     </div>
 
     <script>
-        let currentUser = null;
+        let currentAccount = null;
+        let sessionToken = null;
         let selectedCommandId = null;
         let currentInteractiveSessionId = null;
         let interactivePollingInterval = null;
@@ -194,94 +291,208 @@
 
         // --- Init ---
         window.onload = async function () {
-            try {
-                const res = await fetch('/api/auth/config');
-                const config = await res.json();
-
-                if (config.googleClientId) {
-                    google.accounts.id.initialize({
-                        client_id: config.googleClientId,
-                        callback: handleCredentialResponse,
-                        auto_select: true
-                    });
-
-                    google.accounts.id.renderButton(
-                        document.getElementById("g_id_signin"),
-                        { theme: "outline", size: "large" }
-                    );
-
-                    google.accounts.id.prompt(); // Also display the One Tap dialog
-                } else {
-                    console.error("Google Client ID not configured");
-                    document.getElementById("authSection").innerHTML = '<div class="alert alert-warning">Sign-in not configured</div>';
-                }
-            } catch (err) {
-                console.error("Failed to load auth config", err);
+            // Try to restore session from localStorage
+            const savedSession = localStorage.getItem('aichaos_session');
+            if (savedSession) {
+                sessionToken = savedSession;
+                await checkSession();
             }
         };
+        
+        async function checkSession() {
+            try {
+                const res = await fetch('/api/account/session', {
+                    headers: { 'X-Session-Token': sessionToken }
+                });
+                const data = await res.json();
+                
+                if (data.status === 'success') {
+                    currentAccount = data.account;
+                    updateUIForUser();
+                    loadHistory();
+                } else {
+                    // Session expired
+                    localStorage.removeItem('aichaos_session');
+                    sessionToken = null;
+                }
+            } catch (err) {
+                console.error("Session check failed", err);
+            }
+        }
+
+        // --- Modal Functions ---
+        function showLoginModal() {
+            document.getElementById('loginModal').classList.add('active');
+            showLoginTab();
+        }
+        
+        function closeLoginModal() {
+            document.getElementById('loginModal').classList.remove('active');
+            document.getElementById('loginError').textContent = '';
+            document.getElementById('registerError').textContent = '';
+        }
+        
+        function showLoginTab() {
+            document.getElementById('loginTab').classList.remove('hidden');
+            document.getElementById('registerTab').classList.add('hidden');
+            document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.auth-tab')[0].classList.add('active');
+        }
+        
+        function showRegisterTab() {
+            document.getElementById('loginTab').classList.add('hidden');
+            document.getElementById('registerTab').classList.remove('hidden');
+            document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.auth-tab')[1].classList.add('active');
+        }
+        
+        function showLinkYouTubeModal() {
+            document.getElementById('linkYouTubeModal').classList.add('active');
+            document.getElementById('linkStep1').classList.remove('hidden');
+            document.getElementById('linkStep2').classList.add('hidden');
+            document.getElementById('linkStatus').textContent = '';
+        }
+        
+        function closeLinkYouTubeModal() {
+            document.getElementById('linkYouTubeModal').classList.remove('active');
+        }
 
         // --- Auth Functions ---
-        function handleCredentialResponse(response) {
-            const payload = parseJwt(response.credential);
-            currentUser = {
-                id: payload.sub,
-                name: payload.name,
-                email: payload.email,
-                picture: payload.picture,
-                token: response.credential
-            };
-
-            updateUIForUser();
-            fetchBalance();
-            loadHistory();
+        async function doLogin() {
+            const username = document.getElementById('loginUsername').value.trim();
+            const password = document.getElementById('loginPassword').value;
+            
+            if (!username || !password) {
+                document.getElementById('loginError').textContent = 'Please enter username and password';
+                return;
+            }
+            
+            try {
+                const res = await fetch('/api/account/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                const data = await res.json();
+                
+                if (data.status === 'success') {
+                    sessionToken = data.sessionToken;
+                    currentAccount = data.account;
+                    localStorage.setItem('aichaos_session', sessionToken);
+                    closeLoginModal();
+                    updateUIForUser();
+                    loadHistory();
+                } else {
+                    document.getElementById('loginError').textContent = data.message;
+                }
+            } catch (err) {
+                document.getElementById('loginError').textContent = 'Network error';
+            }
+        }
+        
+        async function doRegister() {
+            const username = document.getElementById('registerUsername').value.trim();
+            const displayName = document.getElementById('registerDisplayName').value.trim();
+            const password = document.getElementById('registerPassword').value;
+            
+            if (!username || !password) {
+                document.getElementById('registerError').textContent = 'Please fill in all required fields';
+                return;
+            }
+            
+            try {
+                const res = await fetch('/api/account/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password, displayName: displayName || null })
+                });
+                const data = await res.json();
+                
+                if (data.status === 'success') {
+                    sessionToken = data.sessionToken;
+                    currentAccount = data.account;
+                    localStorage.setItem('aichaos_session', sessionToken);
+                    closeLoginModal();
+                    updateUIForUser();
+                    loadHistory();
+                    log('Account created! Link your YouTube to receive Super Chat credits.', 'success');
+                } else {
+                    document.getElementById('registerError').textContent = data.message;
+                }
+            } catch (err) {
+                document.getElementById('registerError').textContent = 'Network error';
+            }
         }
 
-        function parseJwt(token) {
-            var base64Url = token.split('.')[1];
-            var base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-            var jsonPayload = decodeURIComponent(window.atob(base64).split('').map(function (c) {
-                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-            }).join(''));
-            return JSON.parse(jsonPayload);
-        }
-
-        function signOut() {
-            currentUser = null;
+        async function logout() {
+            if (sessionToken) {
+                await fetch('/api/account/logout', {
+                    method: 'POST',
+                    headers: { 'X-Session-Token': sessionToken }
+                });
+            }
+            
+            currentAccount = null;
+            sessionToken = null;
+            localStorage.removeItem('aichaos_session');
+            
             document.getElementById('authSection').classList.remove('hidden');
             document.getElementById('userSection').classList.add('hidden');
-            document.getElementById('sendBtn').textContent = "🔒 SIGN IN TO PLAY";
+            document.getElementById('sendBtn').textContent = "🔒 LOGIN TO PLAY";
             document.getElementById('sendBtn').disabled = true;
-            document.getElementById('promptInput').placeholder = "Sign in to send commands...";
-            document.getElementById('recentCommands').innerHTML = '<div class="empty-state">Sign in to see your history...</div>';
+            document.getElementById('promptInput').placeholder = "Login to send commands...";
+            document.getElementById('recentCommands').innerHTML = '<div class="empty-state">Login to see your history...</div>';
         }
 
         function updateUIForUser() {
             document.getElementById('authSection').classList.add('hidden');
             document.getElementById('userSection').classList.remove('hidden');
-            document.getElementById('userName').textContent = currentUser.name;
-            document.getElementById('userAvatar').src = currentUser.picture;
+            document.getElementById('userName').textContent = currentAccount.displayName;
+            document.getElementById('userCredits').textContent = currentAccount.balance.toFixed(2);
 
-            document.getElementById('sendBtn').textContent = "⚡ SEND CHAOS (0.10 Credits)";
+            document.getElementById('sendBtn').textContent = "⚡ SEND CHAOS ($0.10)";
             document.getElementById('sendBtn').disabled = false;
             document.getElementById('promptInput').placeholder = "Ex: Make everyone tiny, Spawn 10 headcrabs...";
+        }
+        
+        async function generateLinkCode() {
+            try {
+                const res = await fetch('/api/account/link-youtube/generate', {
+                    method: 'POST',
+                    headers: { 'X-Session-Token': sessionToken }
+                });
+                const data = await res.json();
+                
+                if (data.status === 'success') {
+                    document.getElementById('linkCode').textContent = data.code;
+                    document.getElementById('linkStep1').classList.add('hidden');
+                    document.getElementById('linkStep2').classList.remove('hidden');
+                } else {
+                    document.getElementById('linkStatus').innerHTML = `<div class="alert alert-error">${data.message}</div>`;
+                }
+            } catch (err) {
+                document.getElementById('linkStatus').innerHTML = '<div class="alert alert-error">Network error</div>';
+            }
         }
 
         // --- API Functions ---
         async function fetchBalance() {
-            if (!currentUser) return;
+            if (!sessionToken) return;
             try {
-                const res = await fetch('/api/user/balance', {
-                    headers: { 'X-User-Id': currentUser.id }
+                const res = await fetch('/api/account/balance', {
+                    headers: { 'X-Session-Token': sessionToken }
                 });
                 const data = await res.json();
-                document.getElementById('userCredits').textContent = data.balance.toFixed(2);
+                if (data.balance !== undefined) {
+                    document.getElementById('userCredits').textContent = data.balance.toFixed(2);
+                }
             } catch (err) {
                 console.error("Failed to fetch balance", err);
             }
         }
 
         async function submitCommand() {
-            if (!currentUser) return;
+            if (!sessionToken || !currentAccount) return;
             const prompt = document.getElementById('promptInput').value.trim();
             if (!prompt) return;
 
@@ -291,30 +502,30 @@
 
             try {
                 const isInteractive = document.getElementById('interactiveMode').checked;
-                const endpoint = isInteractive ? '/trigger/interactive' : '/api/user/submit';
+                const endpoint = isInteractive ? '/trigger/interactive' : '/api/account/submit';
 
                 const res = await fetch(endpoint, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-User-Id': currentUser.id,
-                        'X-User-Name': currentUser.name
+                        'X-Session-Token': sessionToken
                     },
                     body: JSON.stringify({
                         prompt: prompt,
-                        userId: currentUser.id,
                         maxIterations: 5
                     })
                 });
 
                 const data = await res.json();
 
-                if (res.ok) {
+                if (res.ok && data.status === 'success') {
                     if (isInteractive) {
                         handleInteractiveResponse(data, prompt);
                     } else {
                         document.getElementById('promptInput').value = '';
-                        fetchBalance();
+                        if (data.balance !== undefined) {
+                            document.getElementById('userCredits').textContent = data.balance.toFixed(2);
+                        }
                         loadHistory();
                         log("Command sent successfully!", "success");
                     }
@@ -326,7 +537,7 @@
             } finally {
                 if (!document.getElementById('interactiveMode').checked) {
                     btn.disabled = false;
-                    btn.textContent = "⚡ SEND CHAOS (0.10 Credits)";
+                    btn.textContent = "⚡ SEND CHAOS ($0.10)";
                 }
             }
         }
@@ -419,7 +630,7 @@
 
             const btn = document.getElementById('sendBtn');
             btn.disabled = false;
-            btn.textContent = "⚡ SEND CHAOS (0.10 Credits)";
+            btn.textContent = "⚡ SEND CHAOS ($0.10)";
             document.getElementById('promptInput').value = '';
         }
 
@@ -428,9 +639,9 @@
         }
 
         async function loadHistory() {
-            if (!currentUser) return;
+            if (!sessionToken || !currentAccount) return;
             try {
-                const res = await fetch(`/api/history/user/${encodeURIComponent(currentUser.id)}`);
+                const res = await fetch(`/api/history/user/${encodeURIComponent(currentAccount.id)}`);
                 const data = await res.json();
                 renderHistory(data.history);
             } catch (err) {
@@ -485,8 +696,8 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        userId: currentUser.id,
-                        userDisplayName: currentUser.name,
+                        userId: currentAccount?.id,
+                        userDisplayName: currentAccount?.displayName,
                         commandId: selectedCommandId,
                         reason: reason
                     })
@@ -540,8 +751,13 @@
             return typeof status === 'number' ? statusNames[status] || 'Unknown' : status;
         }
 
-        // Auto-refresh history
-        setInterval(loadHistory, 5000);
+        // Auto-refresh balance and history
+        setInterval(() => {
+            if (sessionToken) {
+                fetchBalance();
+                loadHistory();
+            }
+        }, 5000);
     </script>
 </body>
 

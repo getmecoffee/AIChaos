@@ -145,6 +145,39 @@ public class UserController : ControllerBase
             return StatusCode(500, new { status = "error", message = "Failed to process command" });
         }
     }
+    
+    /// <summary>
+    /// Simulates a Super Chat to add credits to a user's balance (admin only).
+    /// </summary>
+    [HttpPost("simulate-superchat")]
+    public ActionResult SimulateSuperChat([FromBody] SimulateSuperChatRequest request)
+    {
+        if (string.IsNullOrEmpty(request.UserId))
+        {
+            return BadRequest(new { status = "error", message = "User ID required" });
+        }
+        
+        if (request.Amount <= 0)
+        {
+            return BadRequest(new { status = "error", message = "Amount must be positive" });
+        }
+        
+        var displayName = request.DisplayName ?? "Simulated User";
+        
+        _userService.AddCredits(request.UserId, request.Amount, displayName);
+        
+        var user = _userService.GetUser(request.UserId);
+        
+        _logger.LogInformation("[ADMIN] Simulated Super Chat: ${Amount} to {User} ({Id})", 
+            request.Amount, displayName, request.UserId);
+        
+        return Ok(new 
+        { 
+            status = "success", 
+            message = $"Added ${request.Amount:F2} credits to {displayName}",
+            newBalance = user?.CreditBalance ?? request.Amount
+        });
+    }
 }
 
 /// <summary>
@@ -153,4 +186,14 @@ public class UserController : ControllerBase
 public class UserSubmitRequest
 {
     public string Prompt { get; set; } = "";
+}
+
+/// <summary>
+/// Request model for simulating a Super Chat.
+/// </summary>
+public class SimulateSuperChatRequest
+{
+    public string UserId { get; set; } = "";
+    public string? DisplayName { get; set; }
+    public decimal Amount { get; set; }
 }
