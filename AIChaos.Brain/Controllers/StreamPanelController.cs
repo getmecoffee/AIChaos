@@ -5,20 +5,20 @@ using Microsoft.AspNetCore.Mvc;
 namespace AIChaos.Brain.Controllers;
 
 /// <summary>
-/// Controller for setup and configuration endpoints, including OAuth callbacks.
+/// Controller for stream panel configuration endpoints, including OAuth callbacks.
 /// </summary>
 [ApiController]
 [Route("api/setup")]
-public class SetupController : ControllerBase
+public class StreamPanelController : ControllerBase
 {
     private readonly SettingsService _settingsService;
     private readonly IHttpClientFactory _httpClientFactory;
-    private readonly ILogger<SetupController> _logger;
+    private readonly ILogger<StreamPanelController> _logger;
 
-    public SetupController(
+    public StreamPanelController(
         SettingsService settingsService,
         IHttpClientFactory httpClientFactory,
-        ILogger<SetupController> logger)
+        ILogger<StreamPanelController> logger)
     {
         _settingsService = settingsService;
         _httpClientFactory = httpClientFactory;
@@ -33,12 +33,12 @@ public class SetupController : ControllerBase
     {
         if (!string.IsNullOrEmpty(error))
         {
-            return Redirect($"/setup?error=youtube_denied");
+            return Redirect($"/dashboard/stream?error=YouTube authorization was denied");
         }
         
         if (string.IsNullOrEmpty(code))
         {
-            return Redirect($"/setup?error=youtube_no_code");
+            return Redirect($"/dashboard/stream?error=No authorization code received from YouTube");
         }
         
         var settings = _settingsService.Settings.YouTube;
@@ -62,7 +62,7 @@ public class SetupController : ControllerBase
             {
                 var errorContent = await tokenResponse.Content.ReadAsStringAsync();
                 _logger.LogError("YouTube token exchange failed: {Error}", errorContent);
-                return Redirect($"/setup?error=youtube_token_failed");
+                return Redirect($"/dashboard/stream?error=Failed to exchange authorization code for access token");
             }
             
             var tokenJson = await tokenResponse.Content.ReadAsStringAsync();
@@ -76,12 +76,12 @@ public class SetupController : ControllerBase
             _settingsService.UpdateYouTube(settings);
             _logger.LogInformation("YouTube OAuth successful");
             
-            return Redirect("/setup?success=youtube");
+            return Redirect("/dashboard/stream?success=YouTube authorization successful! You can now use YouTube features.");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "YouTube OAuth callback error");
-            return Redirect($"/setup?error=youtube_exception");
+            return Redirect($"/dashboard/stream?error=An error occurred during YouTube authorization: {ex.Message}");
         }
     }
 }

@@ -25,6 +25,12 @@ public class AccountService
     private const int VERIFICATION_CODE_EXPIRY_MINUTES = 30;
     private const int SESSION_EXPIRY_DAYS = 30;
 
+    /// <summary>
+    /// Event fired when a YouTube channel is successfully linked to an account.
+    /// Parameters: (channelId, username)
+    /// </summary>
+    public event Action<string, string>? OnChannelLinked;
+
     public AccountService(ILogger<AccountService> logger)
     {
         _logger = logger;
@@ -311,6 +317,9 @@ public class AccountService
         _youtubeIndex[youtubeChannelId] = account.Id;
         SaveAccounts();
         SavePendingCredits();
+        
+        // Fire event for UI notification
+        OnChannelLinked?.Invoke(youtubeChannelId, account.Username);
     }
 
     /// <summary>
