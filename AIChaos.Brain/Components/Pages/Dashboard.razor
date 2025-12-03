@@ -1,6 +1,8 @@
 @page "/dashboard"
 @rendermode InteractiveServer
-@inject HttpClient Http
+@inject SettingsService Settings
+@inject CommandQueueService CommandQueue
+@inject AiCodeGeneratorService CodeGenerator
 @inject IJSRuntime JS
 
 <PageTitle>AI Chaos Dashboard (Admin)</PageTitle>
@@ -150,19 +152,18 @@ else
     private string loginAlertType = "error";
     private string promptInput = "";
     private bool interactiveMode = false;
-    private List<Command>? recentCommands;
+    private List<CommandEntry>? recentCommands;
     private string statusMessage = "";
     private string statusType = "info";
 
     private const string userId = "admin_dashboard";
 
-    protected override async Task OnInitializedAsync()
+    protected override Task OnInitializedAsync()
     {
         // Check if admin is configured
         try
         {
-            var response = await Http.GetFromJsonAsync<AdminStatusResponse>("/api/setup/admin/status");
-            if (response != null && !response.IsConfigured)
+            if (!Settings.IsAdminConfigured)
             {
                 loginAlert = "Admin password not set. Please configure it in Setup first.";
                 loginAlertType = "warning";
@@ -173,32 +174,33 @@ else
             loginAlert = "Failed to check admin status";
             Console.WriteLine($"Admin status check failed: {ex.Message}");
         }
+        
+        return Task.CompletedTask;
     }
 
-    private async Task Login()
+    private Task Login()
     {
         try
         {
-            var response = await Http.PostAsJsonAsync("/api/setup/admin/login", new { password = loginPassword });
-            var data = await response.Content.ReadFromJsonAsync<AdminLoginResponse>();
-            
-            if (data?.Status == "success")
+            if (Settings.ValidateAdminPassword(loginPassword))
             {
                 isLoggedIn = true;
-                await LoadRecentCommands();
+                LoadRecentCommands();
             }
             else
             {
-                loginAlert = data?.Message ?? "Invalid password";
+                loginAlert = "Invalid password";
                 loginAlertType = "error";
             }
         }
         catch (Exception ex)
         {
-            loginAlert = "Network error";
+            loginAlert = "Error during login";
             loginAlertType = "error";
             Console.WriteLine($"Login failed: {ex.Message}");
         }
+        
+        return Task.CompletedTask;
     }
 
     private async Task SendPrompt()
@@ -208,48 +210,38 @@ else
         
         try
         {
-            var endpoint = interactiveMode ? "/trigger/interactive" : "/trigger";
-            var response = await Http.PostAsJsonAsync(endpoint, new 
-            { 
-                prompt = promptInput,
-                userId = userId,
-                maxIterations = 5
-            });
+            // Generate code using AI
+            var (executionCode, undoCode) = await CodeGenerator.GenerateCodeAsync(promptInput);
             
-            var data = await response.Content.ReadFromJsonAsync<TriggerResponse>();
+            // Add command to queue
+            var command = CommandQueue.AddCommand(
+                userPrompt: promptInput,
+                executionCode: executionCode,
+                undoCode: undoCode,
+                source: "dashboard",
+                author: "Admin",
+                imageContext: null,
+                userId: userId,
+                aiResponse: null
+            );
             
-            if (data?.Status == "queued" || data?.Status == "in_progress")
-            {
-                ShowStatus($"✓ {promptInput}", "success");
-                if (!string.IsNullOrEmpty(data.AiResponse))
-                {
-                    ShowStatus($"💬 AI: {data.AiResponse}", "info");
-                }
-                promptInput = "";
-                await LoadRecentCommands();
-            }
-            else if (data?.Status == "ignored")
-            {
-                ShowStatus($"✗ BLOCKED: {data.Message}", "error");
-            }
-            else
-            {
-                ShowStatus($"✗ ERROR: {data?.Message ?? "Unknown error"}", "error");
-            }
+            ShowStatus($"✓ {promptInput}", "success");
+            promptInput = "";
+            LoadRecentCommands();
         }
         catch (Exception ex)
         {
-            ShowStatus($"✗ NETWORK ERROR: {ex.Message}", "error");
+            ShowStatus($"✗ ERROR: {ex.Message}", "error");
             Console.WriteLine($"Send prompt failed: {ex.Message}");
         }
     }
 
-    private async Task LoadRecentCommands()
+    private void LoadRecentCommands()
     {
         try
         {
-            var response = await Http.GetFromJsonAsync<HistoryResponse>($"/api/history/user/{Uri.EscapeDataString(userId)}");
-            recentCommands = response?.History?.TakeLast(10).Reverse().ToList();
+            var history = CommandQueue.GetHistoryForUser(userId);
+            recentCommands = history.TakeLast(10).Reverse().ToList();
         }
         catch (Exception ex)
         {
@@ -257,34 +249,55 @@ else
         }
     }
 
-    private async Task RepeatCommand(int commandId)
+    private Task RepeatCommand(int commandId)
     {
         try
         {
-            var response = await Http.PostAsJsonAsync("/api/repeat", new { commandId });
-            var data = await response.Content.ReadFromJsonAsync<ApiResponse>();
-            ShowStatus(data?.Status == "success" ? "✓ Command repeated!" : $"✗ {data?.Message}", data?.Status == "success" ? "success" : "error");
-            await LoadRecentCommands();
+            var command = CommandQueue.GetHistory().FirstOrDefault(c => c.Id == commandId);
+            if (command != null)
+            {
+                CommandQueue.AddCommand(
+                    userPrompt: command.UserPrompt,
+                    executionCode: command.ExecutionCode,
+                    undoCode: command.UndoCode,
+                    source: "dashboard",
+                    author: "Admin",
+                    imageContext: command.ImageContext,
+                    userId: userId,
+                    aiResponse: null
+                );
+                ShowStatus("✓ Command repeated!", "success");
+                LoadRecentCommands();
+            }
+            else
+            {
+                ShowStatus("✗ Command not found", "error");
+            }
         }
-        catch
+        catch (Exception ex)
         {
-            ShowStatus("✗ Network error", "error");
+            ShowStatus("✗ Error repeating command", "error");
+            Console.WriteLine($"Repeat failed: {ex.Message}");
         }
+        
+        return Task.CompletedTask;
     }
 
-    private async Task UndoCommand(int commandId)
+    private Task UndoCommand(int commandId)
     {
         try
         {
-            var response = await Http.PostAsJsonAsync("/api/undo", new { commandId });
-            var data = await response.Content.ReadFromJsonAsync<ApiResponse>();
-            ShowStatus(data?.Status == "success" ? "✓ Command undone!" : $"✗ {data?.Message}", data?.Status == "success" ? "success" : "error");
-            await LoadRecentCommands();
+            var success = CommandQueue.UndoCommand(commandId);
+            ShowStatus(success ? "✓ Command undone!" : "✗ Failed to undo", success ? "success" : "error");
+            LoadRecentCommands();
         }
-        catch
+        catch (Exception ex)
         {
-            ShowStatus("✗ Network error", "error");
+            ShowStatus("✗ Error undoing command", "error");
+            Console.WriteLine($"Undo failed: {ex.Message}");
         }
+        
+        return Task.CompletedTask;
     }
 
     private void ShowStatus(string message, string type)
@@ -292,64 +305,31 @@ else
         statusMessage = message;
         statusType = type;
         StateHasChanged();
-        _ = Task.Delay(3000).ContinueWith(_ => { statusMessage = ""; StateHasChanged(); });
+        _ = Task.Delay(3000).ContinueWith(async _ => 
+        { 
+            await InvokeAsync(() =>
+            {
+                statusMessage = ""; 
+                StateHasChanged();
+            });
+        });
     }
 
-    private string GetStatusClass(string status) => status?.ToLower() switch
+    private string GetStatusClass(CommandStatus status) => status switch
     {
-        "executed" => "executed",
-        "failed" => "failed",
-        "queued" => "queued",
-        "undone" => "undone",
+        CommandStatus.Executed => "executed",
+        CommandStatus.Failed => "failed",
+        CommandStatus.Queued => "queued",
+        CommandStatus.Undone => "undone",
         _ => "pending"
     };
     
-    private string GetStatusText(string status) => status ?? "Unknown";
+    private string GetStatusText(CommandStatus status) => status.ToString();
 
     private async Task HandleLoginKeypress(KeyboardEventArgs e)
     {
         if (e.Key == "Enter")
             await Login();
     }
-
-    // DTOs
-    private class AdminStatusResponse
-    {
-        public bool IsConfigured { get; set; }
-    }
-
-    private class AdminLoginResponse
-    {
-        public string Status { get; set; } = "";
-        public string? Message { get; set; }
-    }
-
-    private class Command
-    {
-        public int Id { get; set; }
-        public DateTime Timestamp { get; set; }
-        public string UserPrompt { get; set; } = "";
-        public string? AiResponse { get; set; }
-        public string Source { get; set; } = "";
-        public string Status { get; set; } = "Pending";  // CommandStatus enum as string
-    }
-
-    private class TriggerResponse
-    {
-        public string Status { get; set; } = "";
-        public string? Message { get; set; }
-        public string? AiResponse { get; set; }
-        public string? SessionId { get; set; }
-    }
-
-    private class HistoryResponse
-    {
-        public List<Command>? History { get; set; }
-    }
-
-    private class ApiResponse
-    {
-        public string Status { get; set; } = "";
-        public string? Message { get; set; }
-    }
 }
+
