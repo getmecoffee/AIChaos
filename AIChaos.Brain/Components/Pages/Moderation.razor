@@ -230,10 +230,37 @@ else
     private async Task Login()
     {
         moderationPassword = moderationPassword.ToUpper();
-        isLoggedIn = true;
-        await LoadPendingImages();
-        await LoadRefunds();
-        ToggleAutoRefresh();
+        
+        // Validate password by trying to load pending images
+        // The API will return 401 if password is invalid
+        try
+        {
+            var request = new HttpRequestMessage(HttpMethod.Get, "/api/moderation/pending");
+            request.Headers.Add("X-Moderation-Password", moderationPassword);
+            var response = await Http.SendAsync(request);
+            
+            if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                loginAlert = "Invalid moderation password";
+                loginAlertType = "error";
+                return;
+            }
+            
+            // Password is valid
+            isLoggedIn = true;
+            var data = await response.Content.ReadFromJsonAsync<PendingImagesResponse>();
+            pendingImageCount = data?.TotalPending ?? 0;
+            pendingImages = data?.Images;
+            
+            await LoadRefunds();
+            ToggleAutoRefresh();
+        }
+        catch (Exception ex)
+        {
+            loginAlert = "Network error";
+            loginAlertType = "error";
+            Console.WriteLine($"Login failed: {ex.Message}");
+        }
     }
 
     private void ToggleAutoRefresh()

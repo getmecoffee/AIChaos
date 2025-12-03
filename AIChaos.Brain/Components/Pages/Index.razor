@@ -273,20 +273,24 @@
     private string registerPassword = "";
     private string registerError = "";
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        // Try to restore session from localStorage
-        try
+        if (firstRender)
         {
-            sessionToken = await JS.InvokeAsync<string>("localStorage.getItem", "aichaos_session");
-            if (!string.IsNullOrEmpty(sessionToken))
+            // Try to restore session from localStorage
+            try
             {
-                await CheckSession();
+                sessionToken = await JS.InvokeAsync<string>("localStorage.getItem", "aichaos_session");
+                if (!string.IsNullOrEmpty(sessionToken))
+                {
+                    await CheckSession();
+                    StateHasChanged();
+                }
             }
-        }
-        catch
-        {
-            // localStorage might not be available yet
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Session restore failed: {ex.Message}");
+            }
         }
     }
 
