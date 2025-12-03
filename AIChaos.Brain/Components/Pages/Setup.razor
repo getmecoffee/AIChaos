@@ -1,9 +1,6 @@
 @page "/setup"
 @rendermode InteractiveServer
-@inject SettingsService Settings
-@inject TunnelService Tunnel
-@inject TestClientService TestClient
-@inject AiCodeGeneratorService CodeGenerator
+@inject HttpClient Http
 @inject IJSRuntime JS
 @inject NavigationManager Navigation
 
@@ -263,8 +260,8 @@ else
     {
         try
         {
-            // Check admin status
-            if (!Settings.IsAdminConfigured)
+            var response = await Http.GetFromJsonAsync<AdminStatusResponse>("/api/setup/admin/status");
+            if (response != null && !response.IsConfigured)
             {
                 showSetPasswordForm = true;
             }
