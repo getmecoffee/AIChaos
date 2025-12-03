@@ -53,9 +53,12 @@ else
         @onclick='() => NavigateToSubPage("commands")'>
             ⚡ Commands
         </button>
-        <button class="admin-tab @(activeSubPage == "setup" ? "active" : "")" @onclick='() => NavigateToSubPage("setup")'>
-            🔧 Setup
-        </button>
+        @if (currentAccount.Role == UserRole.Admin)
+        {
+            <button class="admin-tab @(activeSubPage == "setup" ? "active" : "")" @onclick='() => NavigateToSubPage("setup")'>
+                🔧 Setup
+            </button>
+        }
         <button class="admin-tab @(activeSubPage == "history" ? "active" : "")"
         @onclick='() => NavigateToSubPage("history")'>
             📜 History
@@ -78,7 +81,7 @@ else
 
     @if (activeSubPage == "stream")
     {
-        <StreamControlContent />
+        <StreamControlContent CurrentAccount="@currentAccount" />
     }
     else if (activeSubPage == "commands")
     {

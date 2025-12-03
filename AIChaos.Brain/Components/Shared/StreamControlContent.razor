@@ -18,58 +18,61 @@
 }
 
 <div class="stream-control-grid">
-    <!-- Manual Blast Controls -->
-    <div class="card control-panel">
-        <h2>💥 Queue Control</h2>
-        <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 15px;">
-            <input type="number" @bind="blastCount" min="1" max="10" 
-                   style="width: 80px; padding: 10px; text-align: center; background: rgba(255,255,255,0.1); border: 1px solid var(--border); border-radius: 5px; color: var(--text);" 
-                   title="Number of commands to blast" />
-            <button @onclick="ManualBlast" class="btn-warning" style="flex: 1;">
-                💥 BLAST QUEUE
-            </button>
-        </div>
-        
-        <!-- Queue Status -->
-        <div class="queue-stats">
-            <div class="stat-item">
-                <span class="stat-label">Active Slots:</span>
-                <span class="stat-value">@activeSlots / @totalSlots</span>
+    @if (CurrentAccount?.Role == UserRole.Admin)
+    {
+        <!-- Manual Blast Controls -->
+        <div class="card control-panel">
+            <h2>💥 Queue Control</h2>
+            <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 15px;">
+                <input type="number" @bind="blastCount" min="1" max="10" 
+                       style="width: 80px; padding: 10px; text-align: center; background: rgba(255,255,255,0.1); border: 1px solid var(--border); border-radius: 5px; color: var(--text);" 
+                       title="Number of commands to blast" />
+                <button @onclick="ManualBlast" class="btn-warning" style="flex: 1;">
+                    💥 BLAST QUEUE
+                </button>
             </div>
+            
+            <!-- Queue Status -->
+            <div class="queue-stats">
+                <div class="stat-item">
+                    <span class="stat-label">Active Slots:</span>
+                    <span class="stat-value">@activeSlots / @totalSlots</span>
+                </div>
+            </div>
+            
+            <button @onclick="LoadQueueStatus" class="btn-secondary" style="width: 100%; margin-top: 10px;">
+                🔄 Refresh Status
+            </button>
+            
+            @if (!string.IsNullOrEmpty(blastMessage))
+            {
+                <div class="alert alert-@blastMessageType" style="margin-top: 10px;">@blastMessage</div>
+            }
         </div>
-        
-        <button @onclick="LoadQueueStatus" class="btn-secondary" style="width: 100%; margin-top: 10px;">
-            🔄 Refresh Status
-        </button>
-        
-        @if (!string.IsNullOrEmpty(blastMessage))
-        {
-            <div class="alert alert-@blastMessageType" style="margin-top: 10px;">@blastMessage</div>
-        }
-    </div>
 
-    <!-- YouTube Video ID Setting -->
-    <div class="card control-panel">
-        <h2>📺 Stream Settings</h2>
-        <div class="form-group">
-            <label>Live Stream Video ID</label>
-            <input type="text" @bind="videoId" placeholder="e.g., dQw4w9WgXcQ" 
-                   style="width: 100%; padding: 10px; background: rgba(255,255,255,0.1); border: 1px solid var(--border); border-radius: 5px; color: var(--text);">
-            <small style="color: var(--text-dim);">The video ID from your YouTube live stream URL</small>
+        <!-- YouTube Video ID Setting -->
+        <div class="card control-panel">
+            <h2>📺 Stream Settings</h2>
+            <div class="form-group">
+                <label>Live Stream Video ID</label>
+                <input type="text" @bind="videoId" placeholder="e.g., dQw4w9WgXcQ" 
+                       style="width: 100%; padding: 10px; background: rgba(255,255,255,0.1); border: 1px solid var(--border); border-radius: 5px; color: var(--text);">
+                <small style="color: var(--text-dim);">The video ID from your YouTube live stream URL</small>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button @onclick="SaveVideoId" class="btn-primary" style="flex: 1;">
+                    💾 Save Video ID
+                </button>
+                <button @onclick="LoginWithYouTube" class="btn-secondary" style="flex: 1;">
+                    🔗 Login with YouTube
+                </button>
+            </div>
+            @if (!string.IsNullOrEmpty(videoMessage))
+            {
+                <div class="alert alert-@videoMessageType" style="margin-top: 10px;">@videoMessage</div>
+            }
         </div>
-        <div style="display: flex; gap: 10px;">
-            <button @onclick="SaveVideoId" class="btn-primary" style="flex: 1;">
-                💾 Save Video ID
-            </button>
-            <button @onclick="LoginWithYouTube" class="btn-secondary" style="flex: 1;">
-                🔗 Login with YouTube
-            </button>
-        </div>
-        @if (!string.IsNullOrEmpty(videoMessage))
-        {
-            <div class="alert alert-@videoMessageType" style="margin-top: 10px;">@videoMessage</div>
-        }
-    </div>
+    }
 
     <!-- Pending Images -->
     <div class="card moderation-section">
@@ -311,6 +314,9 @@
 </style>
 
 @code {
+    [Parameter]
+    public Account? CurrentAccount { get; set; }
+    
     // Global message
     private string globalMessage = "";
     private string globalMessageType = "info";
