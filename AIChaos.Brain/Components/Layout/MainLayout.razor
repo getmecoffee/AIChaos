@@ -1,0 +1,59 @@
+@inherits LayoutComponentBase
+@inject AccountService AccountService
+@inject IJSRuntime JS
+
+<Header>
+    <TitleContent>
+        <SectionOutlet SectionId="PageSections.Title" />
+    </TitleContent>
+    <SubtitleContent>
+        <SectionOutlet SectionId="PageSections.Subtitle" />
+    </SubtitleContent>
+</Header>
+
+<AccountBar CurrentAccount="@currentAccount" OnAccountChanged="@LoadAccount" />
+
+<NavMenu />
+
+<div class="container">
+    <CascadingValue Value="@currentAccount">
+        @Body
+    </CascadingValue>
+</div>
+
+@code {
+    private Account? currentAccount;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadAccount();
+        }
+    }
+
+    private async Task LoadAccount()
+    {
+        try
+        {
+            // Get session token from localStorage (secure approach)
+            var sessionToken = await JS.InvokeAsync<string>("localStorage.getItem", "sessionToken");
+            if (!string.IsNullOrEmpty(sessionToken))
+            {
+                // Validate session token with AccountService
+                currentAccount = AccountService.GetAccountBySession(sessionToken);
+                if (currentAccount == null)
+                {
+                    // Session expired or invalid, clear localStorage
+                    await JS.InvokeVoidAsync("localStorage.removeItem", "sessionToken");
+                }
+            }
+        }
+        catch
+        {
+            currentAccount = null;
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+}
