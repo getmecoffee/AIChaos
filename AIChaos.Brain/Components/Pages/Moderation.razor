@@ -1,6 +1,8 @@
 @page "/moderation"
 @rendermode InteractiveServer
-@inject HttpClient Http
+@inject SettingsService Settings
+@inject ImageModerationService ImageModeration  
+@inject RefundService Refunds
 @inject IJSRuntime JS
 
 <PageTitle>AI Chaos - Moderation & Refunds</PageTitle>

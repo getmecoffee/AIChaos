@@ -1,6 +1,7 @@
 @page "/history"
 @rendermode InteractiveServer
-@inject HttpClient Http
+@inject SettingsService Settings
+@inject CommandQueueService CommandQueue
 @inject IJSRuntime JS
 
 <PageTitle>AI Chaos - History</PageTitle>
@@ -202,7 +203,7 @@ else
     private string loginAlertType = "error";
     private bool notConfigured = false;
     
-    private List<Command>? commandHistory;
+    private List<CommandEntry>? commandHistory;
     private bool includeHistoryInAi = false;
     private bool autoRefresh = false;
     private int maxHistoryLength = 50;
@@ -210,17 +211,17 @@ else
     
     private System.Threading.Timer? refreshTimer;
 
-    protected override async Task OnInitializedAsync()
+    protected override Task OnInitializedAsync()
     {
-        await CheckAdminStatus();
+        CheckAdminStatus();
+        return Task.CompletedTask;
     }
 
-    private async Task CheckAdminStatus()
+    private void CheckAdminStatus()
     {
         try
         {
-            var response = await Http.GetFromJsonAsync<AdminStatusResponse>("/api/setup/admin/status");
-            if (response != null && !response.IsConfigured)
+            if (!Settings.IsAdminConfigured)
             {
                 notConfigured = true;
             }
@@ -231,39 +232,38 @@ else
         }
     }
 
-    private async Task Login()
+    private Task Login()
     {
         try
         {
-            var response = await Http.PostAsJsonAsync("/api/setup/admin/login", new { password = loginPassword });
-            var data = await response.Content.ReadFromJsonAsync<ApiResponse>();
-            
-            if (data?.Status == "success")
+            if (Settings.ValidateAdminPassword(loginPassword))
             {
                 isLoggedIn = true;
-                await LoadHistory();
+                LoadHistory();
             }
             else
             {
-                loginAlert = data?.Message ?? "Invalid password";
+                loginAlert = "Invalid password";
                 loginAlertType = "error";
             }
         }
-        catch
+        catch (Exception ex)
         {
-            loginAlert = "Network error";
+            loginAlert = "Error during login";
             loginAlertType = "error";
+            Console.WriteLine($"Login failed: {ex.Message}");
         }
+        
+        return Task.CompletedTask;
     }
 
-    private async Task LoadHistory()
+    private void LoadHistory()
     {
         try
         {
-            var response = await Http.GetFromJsonAsync<HistoryResponse>("/api/history");
-            commandHistory = response?.History?.ToList();
-            includeHistoryInAi = response?.Preferences?.IncludeHistoryInAi ?? false;
-            maxHistoryLength = response?.Preferences?.MaxHistoryLength ?? 50;
+            commandHistory = CommandQueue.GetHistory().ToList();
+            includeHistoryInAi = CommandQueue.Preferences.IncludeHistoryInAi;
+            maxHistoryLength = CommandQueue.Preferences.MaxHistoryLength;
         }
         catch (Exception ex)
         {
@@ -271,31 +271,30 @@ else
         }
     }
 
-    private async Task UpdatePreferences()
+    private Task UpdatePreferences()
     {
         try
         {
-            await Http.PostAsJsonAsync("/api/preferences", new 
-            { 
-                includeHistoryInAi,
-                maxHistoryLength
-            });
+            CommandQueue.Preferences.IncludeHistoryInAi = includeHistoryInAi;
+            CommandQueue.Preferences.MaxHistoryLength = maxHistoryLength;
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Update preferences failed: {ex.Message}");
         }
+        
+        return Task.CompletedTask;
     }
 
     private void ToggleAutoRefresh()
     {
         if (autoRefresh)
         {
-            refreshTimer = new System.Threading.Timer(async _ => 
+            refreshTimer = new System.Threading.Timer(_ => 
             {
-                await InvokeAsync(async () => 
+                InvokeAsync(() => 
                 {
-                    await LoadHistory();
+                    LoadHistory();
                     StateHasChanged();
                 });
             }, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
@@ -313,12 +312,12 @@ else
         {
             try
             {
-                await Http.PostAsync("/api/clear_history", null);
-                await LoadHistory();
+                CommandQueue.ClearHistory();
+                LoadHistory();
             }
-            catch
+            catch (Exception ex)
             {
-                await JS.InvokeVoidAsync("alert", "Failed to clear history");
+                await JS.InvokeVoidAsync("alert", $"Failed to clear history: {ex.Message}");
             }
         }
     }
@@ -327,13 +326,29 @@ else
     {
         try
         {
-            var response = await Http.PostAsJsonAsync("/api/repeat", new { commandId });
-            var data = await response.Content.ReadFromJsonAsync<ApiResponse>();
-            await JS.InvokeVoidAsync("alert", data?.Status == "success" ? "Command repeated!" : data?.Message);
+            var command = CommandQueue.GetHistory().FirstOrDefault(c => c.Id == commandId);
+            if (command != null)
+            {
+                CommandQueue.AddCommand(
+                    userPrompt: command.UserPrompt,
+                    executionCode: command.ExecutionCode,
+                    undoCode: command.UndoCode,
+                    source: "history",
+                    author: "Admin",
+                    imageContext: command.ImageContext,
+                    userId: null,
+                    aiResponse: null
+                );
+                await JS.InvokeVoidAsync("alert", "Command repeated!");
+            }
+            else
+            {
+                await JS.InvokeVoidAsync("alert", "Command not found");
+            }
         }
-        catch
+        catch (Exception ex)
         {
-            await JS.InvokeVoidAsync("alert", "Network error");
+            await JS.InvokeVoidAsync("alert", $"Error: {ex.Message}");
         }
     }
 
@@ -341,13 +356,12 @@ else
     {
         try
         {
-            var response = await Http.PostAsJsonAsync("/api/undo", new { commandId });
-            var data = await response.Content.ReadFromJsonAsync<ApiResponse>();
-            await JS.InvokeVoidAsync("alert", data?.Status == "success" ? "Undo command queued!" : data?.Message);
+            var success = CommandQueue.UndoCommand(commandId);
+            await JS.InvokeVoidAsync("alert", success ? "Undo command queued!" : "Failed to undo command");
         }
-        catch
+        catch (Exception ex)
         {
-            await JS.InvokeVoidAsync("alert", "Network error");
+            await JS.InvokeVoidAsync("alert", $"Error: {ex.Message}");
         }
     }
 
@@ -356,16 +370,16 @@ else
         showCodeFor = showCodeFor == id ? null : id;
     }
 
-    private string GetStatusClass(string status) => status?.ToLower() switch
+    private string GetStatusClass(CommandStatus status) => status switch
     {
-        "executed" => "executed",
-        "failed" => "failed",
-        "queued" => "queued",
-        "undone" => "undone",
+        CommandStatus.Executed => "executed",
+        CommandStatus.Failed => "failed",
+        CommandStatus.Queued => "queued",
+        CommandStatus.Undone => "undone",
         _ => "pending"
     };
     
-    private string GetStatusText(string status) => status ?? "Unknown";
+    private string GetStatusText(CommandStatus status) => status.ToString();
 
     private async Task HandleLoginKeypress(KeyboardEventArgs e)
     {
@@ -377,40 +391,5 @@ else
     {
         refreshTimer?.Dispose();
     }
-
-    // DTOs
-    private class AdminStatusResponse
-    {
-        public bool IsConfigured { get; set; }
-    }
-
-    private class ApiResponse
-    {
-        public string Status { get; set; } = "";
-        public string? Message { get; set; }
-    }
-
-    private class Command
-    {
-        public int Id { get; set; }
-        public DateTime Timestamp { get; set; }
-        public string UserPrompt { get; set; } = "";
-        public string ExecutionCode { get; set; } = "";
-        public string UndoCode { get; set; } = "";
-        public string? ErrorMessage { get; set; }
-        public string Source { get; set; } = "";
-        public string Status { get; set; } = "Pending";  // CommandStatus enum as string
-    }
-
-    private class Preferences
-    {
-        public bool IncludeHistoryInAi { get; set; }
-        public int MaxHistoryLength { get; set; }
-    }
-
-    private class HistoryResponse
-    {
-        public List<Command>? History { get; set; }
-        public Preferences? Preferences { get; set; }
-    }
 }
+

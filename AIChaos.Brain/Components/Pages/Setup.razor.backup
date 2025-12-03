@@ -263,8 +263,8 @@ else
     {
         try
         {
-            // Check admin status
-            if (!Settings.IsAdminConfigured)
+            var response = await Http.GetFromJsonAsync<AdminStatusResponse>("/api/setup/admin/status");
+            if (response != null && !response.IsConfigured)
             {
                 showSetPasswordForm = true;
             }
