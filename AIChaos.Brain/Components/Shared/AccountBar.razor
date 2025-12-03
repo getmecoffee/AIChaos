@@ -1,9 +1,11 @@
+@rendermode InteractiveServer
+
 @inject AccountService AccountService
 @inject IJSRuntime JS
 
 @if (CurrentAccount == null)
 {
-    <button @onclick="() => showLoginModal = true" style="padding: 8px 16px;">🔓 Login / Register</button>
+    <button @onclick=LoginButtonClicked style="padding: 8px 16px;">🔓 Login / Register</button>
 }
 else
 {
@@ -129,10 +131,10 @@ else
     }
 </Modal>
 
-@code {
+    @code {
     [Parameter]
     public Account? CurrentAccount { get; set; }
-    
+
     [Parameter]
     public EventCallback OnAccountChanged { get; set; }
 
@@ -142,7 +144,7 @@ else
     private string loginUsername = "";
     private string loginPassword = "";
     private string loginError = "";
-    
+
     private bool youtubeLinkMethodSelected = false;
     private bool useOAuthMethod = false;
     private string? youtubeLinkCode = null;
@@ -152,7 +154,7 @@ else
     {
         youtubeLinkMethodSelected = true;
         useOAuthMethod = useOAuth;
-        
+
         if (useOAuth)
         {
             // Check if OAuth is configured
@@ -231,6 +233,11 @@ else
     {
         await JS.InvokeVoidAsync("localStorage.removeItem", "accountSession");
         await OnAccountChanged.InvokeAsync();
+    }
+
+    private async Task LoginButtonClicked()
+    {
+        showLoginModal = true;
     }
 
     private async Task GenerateYouTubeLinkCode()

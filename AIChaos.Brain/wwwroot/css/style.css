@@ -455,15 +455,11 @@ code {
 }
 
 .global-account-bar {
-    position: fixed;
-    top: 0;
-    right: 0;
     padding: 10px 20px;
     background: var(--bg-card);
-    border-bottom: 1px solid var(--border);
-    border-left: 1px solid var(--border);
+    border: 1px solid var(--border);
     z-index: 1000;
-    border-bottom-left-radius: 8px;
+    border-radius: 8px;
 }
 
 .user-profile {

@@ -145,6 +145,12 @@ public class AccountService
         return account;
     }
 
+    public Account? GetAccountById(string accountId)
+    {
+        _accounts.TryGetValue(accountId, out var account);
+        return account;
+    }
+
     /// <summary>
     /// Gets an account by session token.
     /// </summary>
