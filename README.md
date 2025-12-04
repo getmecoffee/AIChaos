@@ -205,6 +205,52 @@ To let viewers send Ideas (like through YouTube Super Chats), you need a public 
 2. In the Setup page, click **"Start bore"**
 3. Your public URL will appear!
 
+### External Hosting (Recommended for Streamers) ⭐
+
+**This is the ideal method for streamers!** Instead of running tunnels on your local machine, host the Brain server on a separate server (VPS, cloud instance, or another PC) and point your GMod installation to it.
+
+**Why this is better for streaming:**
+- ✅ **No tunneling software needed** - Direct connection to your server
+- ✅ **Better performance** - No tunnel overhead or session limits
+- ✅ **Always available** - Server stays up 24/7 even when you're not streaming
+- ✅ **Separation of concerns** - Game runs on your PC, Brain runs elsewhere
+- ✅ **Easier setup** - Just set one URL in a text file
+
+**How to set it up:**
+
+1. Deploy the Brain server to your VPS/cloud server (AWS, DigitalOcean, etc.)
+   ```bash
+   # On your server
+   cd AIChaos.Brain
+   dotnet run --urls "http://0.0.0.0:5000"
+   ```
+
+2. Make sure port 5000 is accessible (configure firewall/security groups)
+
+3. In your **GMod addons folder** on your gaming PC, create a file:
+   ```
+   addons/AIChaos/tunnel_url.txt
+   ```
+
+4. Put your server's URL in the file (without `/poll`):
+   ```
+   https://your-server.example.com:5000
+   ```
+   or if using HTTP:
+   ```
+   http://your-server-ip:5000
+   ```
+
+5. Restart Garry's Mod - it will automatically connect to your external server!
+
+**Example cloud providers:**
+- **DigitalOcean** - Simple droplets starting at $6/month
+- **AWS Lightsail** - Easy VPS hosting
+- **Linode** - Affordable cloud instances
+- **Oracle Cloud** - Free tier available
+
+> 💡 **Tip**: You can run the Brain on a separate PC in your home network too! Just use the PC's local IP address (e.g., `http://192.168.1.100:5000`).
+
 ### Other Options
 
 **LocalTunnel** is another free option (requires Node.js):
