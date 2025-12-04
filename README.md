@@ -239,16 +239,17 @@ To let viewers send Ideas (like through YouTube Super Chats), you need a public 
    ```
    https://your-server.example.com
    ```
-   or if using HTTP (local network/testing only):
+   or if using HTTP with a non-standard port (local network/testing only):
    ```
    http://your-server-ip:5000
    ```
+   > 💡 **Note**: When using standard HTTP ports (80/443), don't specify the port in the URL.
 
 5. Restart Garry's Mod - it will automatically connect to your external server!
 
 **Security recommendations:**
 - 🔒 **Use HTTPS in production** - Set up a reverse proxy (nginx/caddy) with SSL certificates (use Let's Encrypt for free SSL). The proxy should listen on ports 80/443 and forward to localhost:5000.
-- 🔒 **Firewall configuration** - For viewer submissions, keep port 80/443 open. **Always restrict admin dashboard routes** (`/dashboard/*`) with IP filtering or basic authentication in your reverse proxy for production deployments.
+- 🔒 **Firewall configuration** - Keep port 80/443 open for viewer submissions. Port 5000 should only be accessible from localhost when using a reverse proxy.
 - 🔒 **Set admin password** - Protect the dashboard from unauthorized access (configured on first visit)
 - 🔒 **Monitor the History tab** - Keep an eye on submitted Ideas for abuse
 
