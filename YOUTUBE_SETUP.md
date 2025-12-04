@@ -35,43 +35,60 @@ If you need to configure OAuth credentials first:
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
 2. Create a new project
 3. Enable **YouTube Data API v3**
-4. Create OAuth 2.0 credentials (Web Application)
-5. Add redirect URI: `http://localhost:5000/api/setup/youtube/callback`
-6. Copy Client ID and Client Secret
-7. Go to Dashboard → **Setup** tab
-8. Enter credentials in YouTube Integration section
-9. Click "Login with YouTube"
-10. Return to Stream Control to enter Video ID
+4. **Configure OAuth Consent Screen:**
+   - Choose **"External"** as User Type (allows anyone to login)
+   - Fill in required app information
+   - Add your email to test users (optional but recommended)
+   - Publishing status: Keep in "Testing" mode initially
+5. Create OAuth 2.0 credentials (Web Application)
+6. Add redirect URI: `http://localhost:5000/api/setup/youtube/callback`
+7. Copy Client ID and Client Secret
+8. Go to Dashboard → **Setup** tab
+9. Enter credentials in YouTube Integration section
+10. Click "Login with YouTube"
+11. Return to Stream Control to enter Video ID
+
+> **📝 Note:** Setting User Type to "External" allows up to 100 people to login with OAuth before verification. This is perfect for letting viewers authenticate directly!
 
 ### ⚠️ Google OAuth User Cap (100 Users for Unverified Apps)
 
 **Important Limitation:**
-- Unverified Google Cloud apps are limited to **100 test users**
-- This affects how many viewers can link their YouTube accounts
-- **Solution:** Use link codes instead of requiring OAuth for viewers
+- Unverified Google Cloud apps with "External" user type are limited to **100 OAuth logins**
+- After 100 users authenticate via OAuth, additional users cannot login
+- **Solution:** Chaos offers TWO ways to link accounts
 
-**How Chaos Handles This:**
-- ✅ **Streamer**: Requires OAuth (counts as 1 user)
-- ✅ **Viewers**: Use link codes (typed in chat) - unlimited!
-- ✅ **No OAuth required for viewers** - they just type their code
+**Method 1: OAuth Login (First 100 Users)**
+1. Set OAuth consent screen to **"External"** (see setup above)
+2. First 100 viewers can click "Login with Google" on your site
+3. They authenticate directly with their YouTube account
+4. Instant account linking - no chat codes needed
+5. Easiest experience for early adopters
 
-**Viewer Link Code Flow:**
+**Method 2: Link Codes (Unlimited - Backup After 100)**
 1. Viewer goes to your public URL
 2. Gets unique code (e.g., `LINK-4B2R`)
 3. Types code in YouTube chat
 4. System links their channel WITHOUT OAuth
-5. No impact on 100 user limit
+5. No impact on 100 user limit - works for users 101+
+
+**Recommended Strategy:**
+- ✅ **First 100 viewers**: Use OAuth login (easiest)
+- ✅ **After 100**: Automatically switch messaging to link codes
+- ✅ **Streamer/moderators**: Always use OAuth (count toward 100)
+- ✅ **Link codes**: Always available as backup method
 
 **If You Hit the 100 User Cap:**
-- Only affects streamer/moderator OAuth logins
-- Viewers linking via chat codes are NOT affected
-- To expand: Submit app for Google verification (removes cap)
+- Viewers 1-100: Already authenticated via OAuth ✓
+- Viewers 101+: Use link codes (unlimited)
+- Both methods work identically after linking
+- To remove cap entirely: Submit app for Google verification
 
 **Google Verification Process:**
 - [Submit for verification](https://support.google.com/cloud/answer/9110914)
 - Typically takes 2-4 weeks
 - Removes 100 user limit completely
-- Required only if you need 100+ moderators/admin accounts
+- Allows unlimited OAuth logins
+- Recommended if you expect 100+ concurrent viewers
 
 ## How It Works
 
@@ -91,12 +108,22 @@ If you need to configure OAuth credentials first:
 
 ### For Viewers
 
-**First Time Setup:**
+**Account Linking Options:**
+
+**Option A: OAuth Login (Easiest - First 100 Users)**
+1. Go to your public URL (e.g., `https://your-ngrok-url.ngrok.io`)
+2. Click **"Login with Google"** button
+3. Authorize with YouTube account
+4. ✅ Done! Account instantly linked
+
+**Option B: Link Code (Unlimited - Always Available)**
 1. Go to your public URL (e.g., `https://your-ngrok-url.ngrok.io`)
 2. Click username dropdown → **"Get a Link Code"**
 3. Copy the code (e.g., `LINK-4B2R`)
 4. Type the code in YouTube chat
 5. System automatically links their channel and shows success message
+
+> **💡 Tip:** OAuth is faster for early viewers, but link codes work for everyone and never run out!
 
 **Sending Ideas:**
 1. Donate $1 via Super Chat with Idea as message
@@ -293,8 +320,10 @@ private int DetermineSlotCount(int queueDepth)
 $1 = 1 Idea
 
 How to participate:
-1. Get your link code: [YOUR_URL]
-2. Type code in chat to link account
+1. Go to [YOUR_URL]
+2. Link your account:
+   → Click "Login with Google" (fastest!)
+   → OR get a link code and type in chat
 3. Super Chat $1+ to get credits
 4. Submit your Ideas!
 
