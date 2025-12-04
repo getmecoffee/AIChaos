@@ -1,12 +1,12 @@
 namespace AIChaos.Brain.Models;
 
 /// <summary>
-/// Shared constants for the AI Chaos application.
+/// Shared constants for the Chaos application.
 /// </summary>
 public static class Constants
 {
     /// <summary>
-    /// The cost in credits/USD for submitting a command.
+    /// The cost in credits/USD for submitting an Idea.
     /// </summary>
-    public const decimal CommandCost = 0.10m;
+    public const decimal CommandCost = 1.00m;
 }

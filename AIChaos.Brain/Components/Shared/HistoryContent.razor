@@ -63,7 +63,7 @@
                     <div class="history-actions">
                         <button @onclick="() => RepeatCommand(cmd.Id)" class="btn-info btn-small" title="Repeat">🔁</button>
                         <button @onclick="() => UndoCommand(cmd.Id)" class="btn-warning btn-small" title="Undo">↩</button>
-                        <button @onclick="() => ForceUndoCommand(cmd.Id)" class="btn-danger btn-small" title="Force Undo (AI-generated)">🔧</button>
+                        <button @onclick="() => ForceUndoCommand(cmd.Id)" class="btn-danger btn-small" title="Force Undo (Auto-generated)">🔧</button>
                         <button @onclick="() => ToggleCodeView(cmd.Id)" class="btn-secondary btn-small" title="Show/Hide Code">👁️</button>
                         <button @onclick="() => OpenSavePayloadModal(cmd.Id)" class="btn-success btn-small" title="Save Payload">💾</button>
                     </div>
@@ -95,7 +95,7 @@
     .history-item {
         display: flex;
         justify-content: space-between;
-        align-items: center;
+        align-items: flex-start;
         padding: 15px;
         background: rgba(255, 255, 255, 0.05);
         border-radius: 8px;
@@ -146,6 +146,8 @@
         border-radius: 4px;
         font-size: 11px;
         white-space: nowrap;
+        flex-shrink: 0;
+        align-self: flex-start;
     }
 
     .status-pending { background: #888; }
@@ -158,6 +160,7 @@
     .history-actions {
         display: flex;
         gap: 5px;
+        flex-shrink: 0;
     }
 
     .code-details {
@@ -360,9 +363,9 @@
 
             if (!string.IsNullOrEmpty(undoCode))
             {
-                // Queue the AI-generated undo code directly
+                // Queue the auto-generated undo code directly
                 CommandQueue.QueueCode(undoCode);
-                Console.WriteLine($"[FORCE UNDO] AI-generated undo queued for command #{commandId}");
+                Console.WriteLine($"[FORCE UNDO] Auto-generated undo queued for command #{commandId}");
             }
             else
             {

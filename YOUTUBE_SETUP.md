@@ -1,250 +1,450 @@
-# YouTube Super Chat Listener Setup Guide
+# YouTube Super Chat Integration - StreamReady Guide
 
 ## Overview
-The YouTube listener monitors your live stream chat for Super Chats (donations) and automatically sends them to the AI Chaos system.
+The YouTube integration for Chaos enables a streamlined "invisible economy" where viewers donate via Super Chat to send Ideas to your game. The system uses a $1 per Idea pricing model with hidden balances and real-time account linking.
 
 ## Features
-- ✅ **Super Chat Detection** - Automatically processes paid messages
-- ✅ **Minimum Amount Filter** - Only activate chaos for donations above a threshold
-- ✅ **Regular Chat Support** - Optionally allow free chat commands
-- ✅ **Rate Limiting** - Prevent spam with per-user cooldowns
-- ✅ **Real-time Processing** - Instant chaos activation
-- ✅ **Safe Integration** - Works alongside your existing stream
+- ✅ **$1 per Idea** - Simple, transparent pricing
+- ✅ **Invisible Economy** - Balances hidden from main UI
+- ✅ **Pending Credits** - Credits auto-transfer when viewers link accounts
+- ✅ **Real-time Linking** - Viewers type codes in chat to link their YouTube channel
+- ✅ **Slot-based Queue** - Dynamic pacing (3-10 concurrent commands based on demand)
+- ✅ **Unified Dashboard** - Stream Control panel for all stream management
+- ✅ **Role-based Access** - Moderator and Admin permissions
 
-## Installation
+## Quick Setup
 
-### 1. Install Python Dependencies
-```bash
-pip install pytchat requests
-```
+### Option 1: Stream Control (Recommended)
 
-Or install all dependencies:
-```bash
-pip install -r requirements.txt
-```
+1. Start the Brain server: `cd AIChaos.Brain && dotnet run`
+2. Open **http://localhost:5000/dashboard**
+3. Go to **Stream Control** tab (default landing page)
+4. Click **"🔗 Login with YouTube"**
+5. Authorize the app with your YouTube account
+6. Enter your live stream's **Video ID**
+7. Click **"Save Video ID"** (automatically starts listening)
 
-### 2. Configure the Listener
+✅ **Done!** The system is now listening for Super Chats and link codes.
 
-Edit `youtube_listener.py` and set:
+> **⚠️ Important:** You MUST login with YouTube (step 4) for the app to access live chat. Without OAuth authorization, the system cannot see chat messages or Super Chats.
 
-```python
-# Your stream's video ID (from URL)
-VIDEO_ID = "abc123xyz"  # Replace with your actual stream ID
+### Option 2: Full OAuth Setup
 
-# Minimum donation amount (in USD)
-MIN_SUPER_CHAT_AMOUNT = 1.00  # $1 minimum
+If you need to configure OAuth credentials first:
 
-# Optional: Allow free chat commands
-ALLOW_REGULAR_CHAT = False  # Set to True to enable
-CHAT_COMMAND = "!chaos"     # Command prefix if enabled
-```
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project
+3. Enable **YouTube Data API v3**
+4. **Configure OAuth Consent Screen:**
+   - Choose **"External"** as User Type (allows anyone to login)
+   - Fill in required app information
+   - Add your email to test users (optional but recommended)
+   - Publishing status: Keep in "Testing" mode initially
+5. Create OAuth 2.0 credentials (Web Application)
+6. Add redirect URI: `http://localhost:5000/api/setup/youtube/callback`
+7. Copy Client ID and Client Secret
+8. Go to Dashboard → **Setup** tab
+9. Enter credentials in YouTube Integration section
+10. Click "Login with YouTube"
+11. Return to Stream Control to enter Video ID
 
-### 3. Get Your Video ID
+> **📝 Note:** Setting User Type to "External" allows up to 100 people to login with OAuth before verification. This is perfect for letting viewers authenticate directly!
 
-#### During Live Stream:
-1. Go to your YouTube live stream
-2. Copy the URL: `youtube.com/watch?v=VIDEO_ID`
-3. Extract the `VIDEO_ID` part
-4. Example: `youtube.com/watch?v=dQw4w9WgXcQ` → Video ID is `dQw4w9WgXcQ`
+### ⚠️ Google OAuth User Cap (100 Users for Unverified Apps)
 
-#### From YouTube Studio:
-1. Open YouTube Studio
-2. Go to "Content" → Click your live stream
-3. The video ID is in the URL or video details
+**Important Limitation:**
+- Unverified Google Cloud apps with "External" user type are limited to **100 OAuth logins**
+- After 100 users authenticate via OAuth, additional users cannot login
+- **Solution:** Chaos offers TWO ways to link accounts
 
-## Usage
+**Method 1: OAuth Login (First 100 Users)**
+1. Set OAuth consent screen to **"External"** (see setup above)
+2. First 100 viewers can click "Login with Google" on your site
+3. They authenticate directly with their YouTube account
+4. Instant account linking - no chat codes needed
+5. Easiest experience for early adopters
 
-### 1. Start the Brain (if not already running)
-```bash
-python brain.py
-```
+**Method 2: Link Codes (Unlimited - Backup After 100)**
+1. Viewer goes to your public URL
+2. Gets unique code (e.g., `LINK-4B2R`)
+3. Types code in YouTube chat
+4. System links their channel WITHOUT OAuth
+5. No impact on 100 user limit - works for users 101+
 
-### 2. Start the YouTube Listener
-```bash
-python youtube_listener.py
-```
+**Recommended Strategy:**
+- ✅ **First 100 viewers**: Use OAuth login (easiest)
+- ✅ **After 100**: Automatically switch messaging to link codes
+- ✅ **Streamer/moderators**: Always use OAuth (count toward 100)
+- ✅ **Link codes**: Always available as backup method
 
-You should see:
-```
-============================================================
-YouTube AI Chaos Listener
-============================================================
-Video ID: your_video_id
-Brain URL: http://127.0.0.1:5000/trigger
-Min Super Chat: $1.0
-Regular Chat Enabled: False
-============================================================
-Connecting to YouTube Live Chat...
+**If You Hit the 100 User Cap:**
+- Viewers 1-100: Already authenticated via OAuth ✓
+- Viewers 101+: Use link codes (unlimited)
+- Both methods work identically after linking
+- To remove cap entirely: Submit app for Google verification
 
-✓ Connected! Listening for Super Chats...
-```
+**Google Verification Process:**
+- [Submit for verification](https://support.google.com/cloud/answer/9110914)
+- Verification timeline varies and may take several weeks
+- Removes 100 user limit completely
+- Allows unlimited OAuth logins
+- Recommended if you expect 100+ concurrent viewers
 
-### 3. Test with a Super Chat
-- Have someone send a Super Chat on your stream
-- The message content becomes the chaos command
-- Example Super Chat: "Make everyone tiny"
-- The listener will automatically send it to the AI
+### 🔧 Viewer OAuth Login Control
 
-## Configuration Options
+**Streamers can choose how viewers link their accounts:**
 
-### Minimum Super Chat Amount
-```python
-MIN_SUPER_CHAT_AMOUNT = 5.00  # Require $5 minimum
-```
-Only Super Chats worth $5+ will trigger chaos.
+In the Dashboard → **Setup** → **YouTube Integration**, you'll find a checkbox:
 
-### Enable Regular Chat Commands
-```python
-ALLOW_REGULAR_CHAT = True
-CHAT_COMMAND = "!chaos"
-```
-Users can type `!chaos make everyone tiny` without donating.
+**☑️ "Allow viewers to link via Google Sign-In (first 100 users)"**
 
-### Cooldown Settings
-```python
-COOLDOWN_SECONDS = 10  # 10 seconds between commands per user
-```
-Prevents spam from the same user.
+- **Enabled (Default):** Viewers see both OAuth and link code options
+  - First 100 can use "Login with Google" (fastest method)
+  - Link codes always available as backup
+  - Best user experience for early adopters
+
+- **Disabled:** Viewers ONLY see link code option
+  - Forces all viewers to use chat verification codes
+  - Useful if you want to avoid managing OAuth user cap
+  - Simpler if you don't want viewers doing OAuth flow
+  - Still allows unlimited viewers via link codes
+
+**When to disable viewer OAuth:**
+- You don't want to deal with the 100 user OAuth limit
+- You prefer all viewers use the same linking method
+- You want to keep OAuth exclusively for streamer/moderators
+- You haven't set up OAuth consent screen yet
+
+**Note:** Disabling this setting does NOT affect:
+- Streamer's ability to login with YouTube (still required)
+- Link code functionality (always works)
+- Pending credits system (still transfers on link)
 
 ## How It Works
 
-1. **Listener connects** to your YouTube live stream chat
-2. **Monitors all messages** in real-time
-3. **Detects Super Chats** and extracts amount/currency
-4. **Validates amount** against minimum threshold
-5. **Checks cooldown** to prevent spam
-6. **Sends to brain** at `http://127.0.0.1:5000/trigger`
-7. **AI generates code** and executes in GMod
+### For Streamers
 
-## Example Output
+**Setup:**
+1. Configure YouTube OAuth (one-time)
+2. Enter video ID when you go live
+3. System automatically listens for Super Chats and chat codes
 
-```
-[14:32:15] 💰 SUPER CHAT from UserName: $5.00 USD
-           Message: Spawn 10 headcrabs
-           ✓ Chaos activated!
+**Stream Control Dashboard:**
+- **Queue Control** (Admin only): Manual blast, queue status, active slots
+- **Stream Settings** (Admin only): Video ID, OAuth login
+- **Incoming Links**: Review all URLs before processing (moderators can access)
+- **Refund Requests**: Quick approve/deny interface
+- **Global History**: Recent commands with undo/save actions
 
-[14:32:45] 💰 SUPER CHAT from AnotherUser: $2.00 USD
-           Message: Make the screen rainbow
-           ✗ Amount too low (min: $5.0)
+### For Viewers
 
-[14:33:10] 💬 Regular chat from CoolViewer: !chaos make everyone jump
-           ✓ Chaos activated!
-```
+**Account Linking Options:**
 
-## Multiple Currency Support
+**Option A: OAuth Login (Easiest - First 100 Users)**
+1. Go to your public URL (e.g., `https://your-ngrok-url.ngrok.io`)
+2. Click **"Login with Google"** button
+3. Authorize with YouTube account
+4. ✅ Done! Account instantly linked
 
-The listener automatically handles different currencies:
-- USD ($5.00)
-- EUR (€5.00)
-- GBP (£5.00)
-- JPY (¥500)
-- And more!
+**Option B: Link Code (Unlimited - Always Available)**
+1. Go to your public URL (e.g., `https://your-ngrok-url.ngrok.io`)
+2. Click username dropdown → **"Get a Link Code"**
+3. Copy the code (e.g., `LINK-4B2R`)
+4. Type the code in YouTube chat
+5. System automatically links their channel and shows success message
 
-The amount is converted to a numeric value for comparison.
+> **💡 Tip:** OAuth is faster for early viewers, but link codes work for everyone and never run out!
 
-## Safety Features
+**Sending Ideas:**
+1. Donate $1 via Super Chat with Idea as message
+   - Example: Super Chat $5 with message "Make everyone tiny"
+   - Credits added: 5 (one per dollar)
+2. Go to public URL and click **"Send Chaos"**
+3. Type Idea and submit
+4. Balance decrements by $1 per Idea (hidden from viewer)
+5. When balance is $0, button shows: "You'll need to donate again to send another"
 
-1. **Amount Validation** - Ensures minimum donation threshold
-2. **Rate Limiting** - Per-user cooldowns prevent spam
-3. **Brain Safety Checks** - All prompts go through the brain's safety filters
-4. **Error Handling** - Gracefully handles connection issues
+**Checking Balance:**
+- Click username → View profile modal
+- Balance shown only there (invisible economy)
+
+## Pricing & Economy
+
+### Viewer Experience
+
+**Main Interface (Public):**
+- Button: "Send Chaos" (no price shown)
+- Explainer: "Each dollar gets you one Idea"
+- When insufficient funds: "You'll need to donate again to send another"
+- No visible wallet balance
+
+**Profile Modal:**
+- Balance visible when user clicks their username
+- Maintains transparency while de-emphasizing transaction
+
+### Pending Credits System
+
+**How it works:**
+1. Viewer donates $5 via Super Chat (channel not yet linked)
+2. System stores 5 pending credits for that YouTube channel
+3. Viewer later types link code in chat
+4. System automatically transfers all 5 credits to their account
+5. Credits immediately available for use
+
+**Benefits:**
+- Viewers can donate before creating account
+- No credits lost if they link later
+- Automatic transfer on first login
+
+## Queue System
+
+### Slot-Based Pacing
+
+Unlike traditional FIFO queues, Chaos uses concurrent execution slots:
+
+**Dynamic Scaling:**
+- **0-5 Ideas in queue**: 3 active slots → "Drip feed" pacing
+- **6-20 Ideas**: 4-6 slots → Moderate chaos
+- **50+ Ideas**: 10 slots → "Absolute chaos" mode
+
+**Slot Timer:**
+- Each slot blocks for 25 seconds after execution
+- Independent of actual effect duration
+- Prevents overwhelming the game
+
+**Manual Blast (Admin only):**
+- Bypass slot limits entirely
+- Execute 1-10 commands instantly
+- Useful for clearing backlog or special events
+
+## Stream Control Panel
+
+The unified Stream Control tab provides all essential streaming tools:
+
+### For Admins
+
+**Queue Control Panel:**
+- Queue depth display
+- Active/total slots status
+- Manual blast button (1-10 commands)
+- Bypass all rate limiting
+
+**Stream Settings Panel:**
+- YouTube video ID input with auto-start
+- "Login with YouTube" OAuth button
+- Quick access to stream configuration
+
+### For Moderators
+
+**Incoming Links Panel:**
+- Review all URLs from Ideas
+- Approve or deny before processing
+- Auto-refresh toggle (5s intervals)
+
+**Refund Requests Panel:**
+- Quick approve/deny interface
+- Amount display
+- Auto-refresh toggle
+
+**Global History Panel:**
+- Last 20 commands (spoiler-protected dropdown)
+- Action buttons: Undo, Force Undo, Save Payload
+- Auto-refresh toggle
+
+## Getting Your Video ID
+
+### Method 1: From URL (Easiest)
+
+When your stream is live:
+1. Go to your YouTube live stream
+2. Copy the URL: `youtube.com/watch?v=VIDEO_ID_HERE`
+3. Extract the `VIDEO_ID_HERE` part
+4. Example: `youtube.com/watch?v=dQw4w9WgXcQ` → Video ID is `dQw4w9WgXcQ`
+
+### Method 2: From YouTube Studio
+
+1. Open YouTube Studio
+2. Go to "Content"
+3. Click your live stream
+4. Video ID is in the URL or video details
+
+### Method 3: From Live Control Room
+
+1. Start your stream
+2. Go to Live Control Room
+3. Video ID is in the browser URL
 
 ## Troubleshooting
 
 ### "Invalid video ID" Error
-- Make sure your stream is **live** (not scheduled or ended)
-- Double-check the video ID from your stream URL
-- Video ID should be 11 characters (letters, numbers, underscores, hyphens)
+- Stream must be **actively live** (not scheduled or ended)
+- Video ID should be 11 characters
+- Try copying directly from live stream URL
 
-### "Chat has ended" Message
-- Stream must be actively live
-- Chat must be enabled on the stream
-- Try restarting the listener after stream starts
+### "Unauthorized" Error
+- **Most common cause:** OAuth not completed - click "Login with YouTube" in Setup or Stream Control
+- OAuth token expired - click "Login with YouTube" again
+- Verify OAuth credentials in Google Cloud Console
+- Check redirect URI: `http://localhost:5000/api/setup/youtube/callback`
+- **Remember:** The system CANNOT see live chat without OAuth authorization
 
-### "Failed to connect to brain"
-- Make sure `brain.py` is running on port 5000
-- Check that `BRAIN_URL = "http://127.0.0.1:5000/trigger"`
-- Test the brain directly at `http://127.0.0.1:5000/`
+### Link Codes Not Working
+- **First check:** Is OAuth authorized? Click "Login with YouTube" if not
+- **Second check:** Is the chat listener running? Look for "✓ Video ID saved and listening to chat" message
+- Check server logs for `[YouTube]` and `[ACCOUNT]` messages
+- Verify chat listener is running (see "✓ Connected!" message)
+- Make sure viewer types exact code (case-sensitive)
+- Codes expire after 30 minutes
+- Remember: Link codes bypass the 100 user OAuth limit!
 
-### Super Chats Not Detected
-- Verify `pytchat` is installed: `pip install pytchat`
-- Make sure Super Chats are enabled on your channel
-- Check YouTube's monetization requirements
+### Pending Credits Not Transferring
+- Check `pending_credits.json` file exists
+- Verify viewer is typing correct link code
+- Check server logs for transfer confirmation
+- Credits transfer is automatic when channel links
 
-### Module Not Found: pytchat
+### Super Chats Not Processing
+- Verify minimum amount is set correctly ($1 default)
+- Check YouTube monetization is enabled
+- Super Chat feature must be enabled on channel
+- Ensure OAuth is authenticated
+
+## Configuration Options
+
+### Minimum Super Chat Amount
+
+In Dashboard → Setup:
+```
+Minimum Super Chat Amount: $1.00
+```
+Only Super Chats worth $1+ will add credits.
+
+### Slot Timing
+
+In `QueueSlotService.cs`:
+```csharp
+private const int SlotTimerSeconds = 25; // Default: 25 seconds
+```
+Adjust pacing by changing slot timer duration.
+
+### Queue Slot Scaling
+
+In `QueueSlotService.cs`:
+```csharp
+private int DetermineSlotCount(int queueDepth)
+{
+    if (queueDepth <= 5) return 3;    // Low volume
+    if (queueDepth <= 10) return 4;   // Building up
+    if (queueDepth <= 20) return 6;   // Moderate chaos
+    if (queueDepth <= 50) return 8;   // High activity
+    return 10;                         // Absolute chaos
+}
+```
+
+## Viewer Communication
+
+### Suggested Stream Overlay Text
+
+```
+💰 Send Ideas via Super Chat! 💰
+$1 = 1 Idea
+
+How to participate:
+1. Go to [YOUR_URL]
+2. Link your account:
+   → Click "Login with Google" (fastest!)
+   → OR get a link code and type in chat
+3. Super Chat $1+ to get credits
+4. Submit your Ideas!
+
+Examples:
+• "Make everyone tiny"
+• "Spawn 5 headcrabs"
+• "Rainbow screen for 10 seconds"
+```
+
+### Chat Commands to Share
+
+```
+!link - Get instructions to link your YouTube channel
+!balance - Check your Idea credit balance (via website)
+!ideas - See example Ideas to try
+```
+
+## Security & Moderation
+
+### Link Review (All Moderators)
+
+**Incoming Links panel:**
+- All URLs extracted from Ideas
+- Review before approval
+- Prevent malicious links
+
+### Refund Management
+
+**When to approve refunds:**
+- Technical issues prevented execution
+- Inappropriate content (violates rules)
+- Duplicate charges
+
+**When to deny:**
+- Idea executed successfully
+- User changed mind after execution
+- Violates refund policy
+
+## Advanced: Multiple Streams
+
+You can run multiple YouTube listeners:
+
+**Terminal 1 (Brain):**
 ```bash
-pip install pytchat
+cd AIChaos.Brain
+dotnet run
 ```
 
-## Running Both Twitch and YouTube
+**Stream Control:**
+- Enter Video ID for current stream
+- Click "Save Video ID" (auto-starts listener)
+- When switching streams, enter new Video ID
 
-You can run multiple listeners simultaneously:
+The system supports hot-swapping between streams without restart.
 
-**Terminal 1:**
-```bash
-python brain.py
-```
+## Best Practices
 
-**Terminal 2:**
-```bash
-python twitch_listener.py
-```
+1. **Test before going live:**
+   - Use a test stream to verify OAuth
+   - Test link codes with a secondary account
+   - Verify Super Chat processing
 
-**Terminal 3:**
-```bash
-python youtube_listener.py
-```
+2. **Have Dashboard open:**
+   - Monitor Stream Control on second screen
+   - Watch queue depth and slot status
+   - Use manual blast for special moments
 
-Both platforms will send commands to the same brain!
+3. **Set clear rules:**
+   - Communicate $1 per Idea pricing
+   - Explain link code process
+   - Share example Ideas
 
-## Tips for Streamers
+4. **Moderate appropriately:**
+   - Review incoming links
+   - Handle refund requests promptly
+   - Use Force Undo for problematic effects
 
-1. **Set appropriate minimums** - Don't make it too cheap or too expensive
-2. **Test before going live** - Use a test stream to verify it works
-3. **Have the history page open** - Monitor on a second screen (`/history`)
-4. **Use Force Undo** - For stubborn effects that won't stop
-5. **Communicate with viewers** - Let them know the format and rules
-
-## Viewer Instructions to Share
-
-*"Send a Super Chat with your chaos command as the message! Minimum $1. Examples:*
-- *"Make everyone tiny"*
-- *"Spawn 5 zombies in front of the player"*
-- *"Turn the screen upside down for 10 seconds"*
-
-*The AI will generate the code and execute it live!"*
-
-## Advanced: Custom Filtering
-
-You can add custom filters before sending to brain:
-
-```python
-def send_to_brain(prompt, author, amount=None):
-    # Custom filter
-    if "banned_word" in prompt.lower():
-        print(f"           ✗ Blocked: Contains banned word")
-        return False
-    
-    # VIP bypass cooldown
-    if author in ["VIPUser1", "VIPUser2"]:
-        # Allow VIPs to bypass cooldown
-        pass
-    
-    # Original code continues...
-```
-
-## Legal & Ethical Notes
-
-- Respect YouTube's Terms of Service
-- Don't encourage dangerous or harmful donations
-- Have clear rules for what's allowed
-- Consider refund policies for blocked commands
-- Moderate appropriately for your audience
+5. **Communicate with viewers:**
+   - Acknowledge donations in real-time
+   - Explain when Ideas are processing
+   - Thank viewers for participation
 
 ## Support
 
-If you encounter issues:
-1. Check the console output for error messages
-2. Verify all configuration values
-3. Test the brain independently first
-4. Ensure stream is live before starting listener
+For issues:
+1. Check server console for error messages
+2. Review Dashboard → History tab for failures
+3. Verify OAuth credentials in Setup
+4. Test with small Super Chat first
+5. Check [GitHub Issues](https://github.com/Xenthio/AIChaos/issues)
+
+## License
+
+See the main repository for license information.

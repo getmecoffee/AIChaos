@@ -25,6 +25,12 @@ public class AccountService
     private const int VERIFICATION_CODE_EXPIRY_MINUTES = 30;
     private const int SESSION_EXPIRY_DAYS = 30;
 
+    /// <summary>
+    /// Event fired when a YouTube channel is successfully linked to an account.
+    /// Parameters: (channelId, username)
+    /// </summary>
+    public event Action<string, string>? OnChannelLinked;
+
     public AccountService(ILogger<AccountService> logger)
     {
         _logger = logger;
@@ -240,6 +246,8 @@ public class AccountService
             return (false, _youtubeIndex[youtubeChannelId]);
         }
         
+        _logger.LogDebug("[ACCOUNT] Checking message for link code: '{Message}'", message);
+        
         // Search for a matching verification code in any account
         foreach (var account in _accounts.Values)
         {
@@ -247,14 +255,21 @@ public class AccountService
                 continue;
                 
             if (account.VerificationCodeExpiresAt.HasValue && account.VerificationCodeExpiresAt.Value < DateTime.UtcNow)
+            {
+                _logger.LogDebug("[ACCOUNT] Skipping expired code for {Username}: {Code}", 
+                    account.Username, account.PendingVerificationCode);
                 continue;
+            }
+            
+            _logger.LogDebug("[ACCOUNT] Checking against code {Code} for {Username}", 
+                account.PendingVerificationCode, account.Username);
             
             if (message.Contains(account.PendingVerificationCode, StringComparison.OrdinalIgnoreCase))
             {
                 // Found a match! Link the channel
                 LinkChannelToAccount(account, youtubeChannelId, displayName);
                 
-                _logger.LogInformation("[ACCOUNT] Linked YouTube channel {ChannelId} to {Username} via chat message", 
+                _logger.LogInformation("[ACCOUNT] ✓ Linked YouTube channel {ChannelId} to {Username} via chat message", 
                     youtubeChannelId, account.Username);
                 
                 return (true, account.Id);
@@ -302,6 +317,9 @@ public class AccountService
         _youtubeIndex[youtubeChannelId] = account.Id;
         SaveAccounts();
         SavePendingCredits();
+        
+        // Fire event for UI notification
+        OnChannelLinked?.Invoke(youtubeChannelId, account.Username);
     }
 
     /// <summary>

@@ -18,7 +18,6 @@ else
             <img src="@CurrentAccount.PictureUrl" alt="" style="width: 28px; height: 28px; border-radius: 50%;">
         }
         <span @onclick="() => showProfileModal = true" style="cursor: pointer;" title="View profile">@CurrentAccount.DisplayName</span>
-        <span class="credits-display">$ <span>@CurrentAccount.CreditBalance.ToString("F2")</span></span>
         @if (!string.IsNullOrEmpty(CurrentAccount.LinkedYouTubeChannelId))
         {
             <span style="color: var(--success); font-size: 12px;">✓ YouTube Linked</span>
@@ -86,10 +85,13 @@ else
     @if (!youtubeLinkMethodSelected)
     {
         <div style="display: flex; flex-direction: column; gap: 10px;">
-            <button @onclick="() => SelectLinkMethod(true)" style="padding: 15px;">
-                <strong>🔐 Google Sign-In</strong><br/>
-                <small style="color: var(--text-dim);">Instant linking via OAuth (requires setup)</small>
-            </button>
+            @if (allowViewerOAuth)
+            {
+                <button @onclick="() => SelectLinkMethod(true)" style="padding: 15px;">
+                    <strong>🔐 Google Sign-In</strong><br/>
+                    <small style="color: var(--text-dim);">Instant linking via OAuth (requires setup)</small>
+                </button>
+            }
             <button @onclick="() => SelectLinkMethod(false)" style="padding: 15px;">
                 <strong>🎫 Verification Code</strong><br/>
                 <small style="color: var(--text-dim);">Generate a code to send in chat</small>
@@ -160,6 +162,14 @@ else
                 <div class="alert alert-error" style="margin-top: 10px;">@linkError</div>
             }
         }
+        else if (linkSuccessful)
+        {
+            <div class="alert alert-success">
+                <p style="font-size: 18px; margin: 10px 0;">✓ YouTube channel successfully linked!</p>
+                <p>Your channel is now connected to your account.</p>
+            </div>
+            <button @onclick="CloseLinkYouTubeModal" style="margin-top: 10px;">Close</button>
+        }
         else
         {
             <div class="alert alert-success">
@@ -168,8 +178,8 @@ else
                 <p>Send this code in the YouTube chat or as a Super Chat message to link your channel.</p>
                 <p style="color: var(--text-dim); font-size: 12px;">This code expires in 30 minutes.</p>
             </div>
+            <button @onclick="ResetLinkMethod" style="background: var(--bg-light); color: var(--text); margin-top: 10px;">Back</button>
         }
-        <button @onclick="ResetLinkMethod" style="background: var(--bg-light); color: var(--text); margin-top: 10px;">Back</button>
     }
 </Modal>
 
@@ -193,7 +203,9 @@ else
     private bool youtubeLinkMethodSelected = false;
     private bool useOAuthMethod = false;
     private string? youtubeLinkCode = null;
+    private bool linkSuccessful = false;
     private bool isOAuthConfigured = false;
+    private bool allowViewerOAuth = true;
     private string? googleClientId = null;
     private DotNetObjectReference<AccountBar>? objRef;
 
@@ -201,6 +213,9 @@ else
     {
         // Create the DotNetObjectReference during initialization
         objRef = DotNetObjectReference.Create(this);
+        
+        // Subscribe to account linking events
+        AccountService.OnChannelLinked += HandleChannelLinked;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -223,6 +238,19 @@ else
         showLinkYouTubeModal = false;
         ResetLinkMethod();
     }
+    
+    private void HandleChannelLinked(string channelId, string username)
+    {
+        // Only show success if this is the current user's account
+        if (CurrentAccount != null && CurrentAccount.Username == username)
+        {
+            InvokeAsync(() =>
+            {
+                linkSuccessful = true;
+                StateHasChanged();
+            });
+        }
+    }
 
     private async Task SelectLinkMethod(bool useOAuth)
     {
@@ -237,6 +265,7 @@ else
             // Check if OAuth is configured
             var settings = SettingsService.Settings;
             isOAuthConfigured = !string.IsNullOrEmpty(settings.YouTube.ClientId);
+            allowViewerOAuth = settings.YouTube.AllowViewerOAuth;
             googleClientId = settings.YouTube.ClientId;
 
             if (isOAuthConfigured)
@@ -293,6 +322,7 @@ else
         youtubeLinkMethodSelected = false;
         useOAuthMethod = false;
         youtubeLinkCode = null;
+        linkSuccessful = false;
         isOAuthConfigured = false;
         oauthError = "";
         oauthSuccess = "";
@@ -445,6 +475,7 @@ else
 
     public void Dispose()
     {
+        AccountService.OnChannelLinked -= HandleChannelLinked;
         objRef?.Dispose();
     }
 }
