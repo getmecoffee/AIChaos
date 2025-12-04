@@ -235,9 +235,9 @@ To let viewers send Ideas (like through YouTube Super Chats), you need a public 
 
 4. Put your server's URL in the file (without `/poll`):
    ```
-   https://your-server.example.com:5000
+   https://your-server.example.com
    ```
-   or if using HTTP:
+   or if using HTTP (local network/testing only):
    ```
    http://your-server-ip:5000
    ```
@@ -245,12 +245,12 @@ To let viewers send Ideas (like through YouTube Super Chats), you need a public 
 5. Restart Garry's Mod - it will automatically connect to your external server!
 
 **Security recommendations:**
-- 🔒 **Use HTTPS in production** - Set up a reverse proxy (nginx/caddy) with SSL certificates (use Let's Encrypt for free SSL)
-- 🔒 **Firewall configuration** - For viewer submissions, keep port 80/443 open; optionally restrict admin dashboard access with IP filtering on your reverse proxy
+- 🔒 **Use HTTPS in production** - Set up a reverse proxy (nginx/caddy) with SSL certificates (use Let's Encrypt for free SSL). The proxy should listen on ports 80/443 and forward to localhost:5000.
+- 🔒 **Firewall configuration** - For viewer submissions, keep port 80/443 open; optionally restrict admin dashboard routes (`/dashboard/*`) with IP filtering or basic authentication in your reverse proxy
 - 🔒 **Set admin password** - Protect the dashboard from unauthorized access (configured on first visit)
 - 🔒 **Monitor the History tab** - Keep an eye on submitted Ideas for abuse
 
-> ⚠️ **Note**: The example uses HTTP for simplicity. For production streaming, use a reverse proxy with HTTPS to encrypt traffic. The public submission page needs to be accessible to viewers, but you can protect admin routes with additional authentication.
+> ⚠️ **Note**: The setup command uses HTTP on 0.0.0.0:5000 for simplicity - this should only be exposed via a reverse proxy with HTTPS in production. For local network testing without public access, binding to 0.0.0.0 is acceptable. For production streaming, use nginx/caddy with HTTPS on standard ports (80/443) and keep port 5000 firewalled to localhost only.
 
 **Example cloud providers:**
 - **DigitalOcean** - Simple droplets starting at $6/month
