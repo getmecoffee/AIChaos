@@ -248,7 +248,7 @@ To let viewers send Ideas (like through YouTube Super Chats), you need a public 
 
 **Security recommendations:**
 - 🔒 **Use HTTPS in production** - Set up a reverse proxy (nginx/caddy) with SSL certificates (use Let's Encrypt for free SSL). The proxy should listen on ports 80/443 and forward to localhost:5000.
-- 🔒 **Firewall configuration** - For viewer submissions, keep port 80/443 open; optionally restrict admin dashboard routes (`/dashboard/*`) with IP filtering or basic authentication in your reverse proxy
+- 🔒 **Firewall configuration** - For viewer submissions, keep port 80/443 open. **Always restrict admin dashboard routes** (`/dashboard/*`) with IP filtering or basic authentication in your reverse proxy for production deployments.
 - 🔒 **Set admin password** - Protect the dashboard from unauthorized access (configured on first visit)
 - 🔒 **Monitor the History tab** - Keep an eye on submitted Ideas for abuse
 
