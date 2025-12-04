@@ -100,7 +100,9 @@
                             <span class="image-author">👤 @img.Author</span>
                         </div>
                         <div class="image-prompt">@img.UserPrompt</div>
-                        <div class="link-url" style="word-break: break-all; font-size: 12px; color: var(--info); margin-bottom: 10px;">🔗 @img.ImageUrl</div>
+                        <div class="link-url" style="word-break: break-all; font-size: 12px; margin-bottom: 10px;">
+                            🔗 <a href="@img.ImageUrl" target="_blank" rel="noopener noreferrer" style="color: var(--info); text-decoration: underline;">@img.ImageUrl</a>
+                        </div>
                         <div class="image-actions">
                             <button @onclick="() => ApproveImage(img.Id)" class="btn-success btn-small">✅</button>
                             <button @onclick="() => DenyImage(img.Id)" class="btn-danger btn-small">❌</button>
@@ -114,7 +116,13 @@
     <!-- Pending Refunds -->
     <div class="card moderation-section">
         <h2>💰 Refund Requests <span class="badge">@pendingRefundCount</span></h2>
-        <button @onclick="LoadPendingRefunds" class="btn-secondary" style="margin-bottom: 15px;">🔄 Refresh</button>
+        <div style="margin-bottom: 15px;">
+            <button @onclick="LoadPendingRefunds" class="btn-secondary">🔄 Refresh</button>
+            <label style="display: inline-flex; align-items: center; gap: 8px; margin-left: 10px; cursor: pointer;">
+                <input type="checkbox" @bind="autoRefreshRefunds" @bind:after="ToggleAutoRefreshRefunds">
+                <span style="color: var(--text-dim); font-size: 14px;">Auto (5s)</span>
+            </label>
+        </div>
         
         @if (pendingRefunds == null || !pendingRefunds.Any())
         {
@@ -400,11 +408,17 @@
     // Refunds
     private List<RefundRequest>? pendingRefunds;
     private int pendingRefundCount = 0;
+    private bool autoRefreshRefunds = false;
+    private System.Threading.Timer? refundRefreshTimer;
 
     // History
     private List<CommandEntry>? history;
     private bool autoRefreshHistory = false;
     private System.Threading.Timer? historyRefreshTimer;
+
+    // Queue Status
+    private bool autoRefreshQueueStatus = true;
+    private System.Threading.Timer? queueStatusRefreshTimer;
 
     protected override async Task OnInitializedAsync()
     {
@@ -424,6 +438,9 @@
         }
         
         await LoadAll();
+        
+        // Start auto-refresh for queue status by default
+        StartAutoRefreshQueueStatus();
     }
 
     private async Task LoadAll()
@@ -500,6 +517,27 @@
         {
             Console.WriteLine($"Failed to load queue status: {ex.Message}");
         }
+        StateHasChanged();
+    }
+
+    private void StartAutoRefreshQueueStatus()
+    {
+        if (queueStatusRefreshTimer == null)
+        {
+            queueStatusRefreshTimer = new System.Threading.Timer(async _ =>
+            {
+                await InvokeAsync(async () =>
+                {
+                    await LoadQueueStatus();
+                });
+            }, null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2));
+        }
+    }
+
+    private void StopAutoRefreshQueueStatus()
+    {
+        queueStatusRefreshTimer?.Dispose();
+        queueStatusRefreshTimer = null;
     }
 
     private void LoadVideoId()
@@ -698,6 +736,25 @@
         }
     }
 
+    private void ToggleAutoRefreshRefunds()
+    {
+        if (autoRefreshRefunds)
+        {
+            refundRefreshTimer = new System.Threading.Timer(async _ =>
+            {
+                await InvokeAsync(async () =>
+                {
+                    await LoadPendingRefunds();
+                });
+            }, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+        }
+        else
+        {
+            refundRefreshTimer?.Dispose();
+            refundRefreshTimer = null;
+        }
+    }
+
     private async Task LoadHistory()
     {
         try
@@ -843,9 +900,11 @@
     {
         imageRefreshTimer?.Dispose();
         historyRefreshTimer?.Dispose();
+        queueStatusRefreshTimer?.Dispose();
         blastMessageCts?.Cancel();
         blastMessageCts?.Dispose();
         videoMessageCts?.Cancel();
         videoMessageCts?.Dispose();
+        refundRefreshTimer?.Dispose();
     }
 }
