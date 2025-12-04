@@ -243,6 +243,14 @@ To let viewers send Ideas (like through YouTube Super Chats), you need a public 
 
 5. Restart Garry's Mod - it will automatically connect to your external server!
 
+**Security recommendations:**
+- 🔒 **Use HTTPS in production** - Set up a reverse proxy (nginx/caddy) with SSL certificates (use Let's Encrypt for free SSL)
+- 🔒 **Restrict firewall access** - Only allow connections from your gaming PC's IP if possible
+- 🔒 **Set admin password** - Protect the dashboard from unauthorized access (configured on first visit)
+- 🔒 **Monitor the History tab** - Keep an eye on submitted Ideas for abuse
+
+> ⚠️ **Note**: The example uses HTTP for simplicity. For production, use a reverse proxy with HTTPS to encrypt traffic.
+
 **Example cloud providers:**
 - **DigitalOcean** - Simple droplets starting at $6/month
 - **AWS Lightsail** - Easy VPS hosting
