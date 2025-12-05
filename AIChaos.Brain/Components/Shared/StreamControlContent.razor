@@ -45,6 +45,12 @@
                 🔄 Refresh Status
             </button>
             
+            <div style="margin-top: 15px; border-top: 1px solid var(--border); padding-top: 15px;">
+                <button @onclick="TestBarrels" class="btn-primary" style="width: 100%;">
+                    🛢️ Test: Spawn 10 Barrels
+                </button>
+            </div>
+            
             @if (!string.IsNullOrEmpty(blastMessage))
             {
                 <div class="alert alert-@blastMessageType" style="margin-top: 10px;">@blastMessage</div>
@@ -1037,6 +1043,36 @@
         {
             CloseSavePayloadModal();
         }
+    }
+
+    private void TestBarrels()
+    {
+        var luaCode = @"
+for i=1,10 do
+    local ent = ents.Create(""prop_physics"")
+    ent:SetModel(""models/props_c17/oildrum001_explosive.mdl"")
+    local ply = player.GetAll()[1]
+    if IsValid(ply) then
+        local tr = ply:GetEyeTrace()
+        ent:SetPos(tr.HitPos + Vector(math.random(-50,50), math.random(-50,50), 50 + i*20))
+        ent:Spawn()
+    end
+end";
+        
+        CommandQueue.AddCommand(
+            "TEST: Spawn 10 Barrels", 
+            luaCode, 
+            "", 
+            "system", 
+            "System", 
+            null, 
+            null, 
+            "Spawning 10 barrels for testing."
+        );
+        
+        blastMessage = "Added barrel test command to queue!";
+        blastMessageType = "success";
+        StateHasChanged();
     }
 
     public void Dispose()
