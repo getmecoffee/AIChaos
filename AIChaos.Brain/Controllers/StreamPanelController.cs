@@ -42,32 +42,7 @@ public class StreamPanelController : ControllerBase
         }
         
         var settings = _settingsService.Settings.YouTube;
-        
-        // Determine the redirect URI used by the client
-        // MUST match exactly what was sent in the authorization request
-        string baseUrl;
-        if (!string.IsNullOrEmpty(_settingsService.Settings.Tunnel.CurrentUrl))
-        {
-            baseUrl = _settingsService.Settings.Tunnel.CurrentUrl;
-        }
-        else
-        {
-            // Fallback to request context
-            var scheme = Request.Scheme;
-            
-            // Handle reverse proxies (like ngrok/cloudflared) that terminate SSL
-            if (Request.Headers.TryGetValue("X-Forwarded-Proto", out var proto))
-            {
-                scheme = proto.ToString();
-            }
-            
-            baseUrl = $"{scheme}://{Request.Host}/";
-        }
-        
-        if (!baseUrl.EndsWith("/")) baseUrl += "/";
-        var redirectUri = $"{baseUrl}api/setup/youtube/callback";
-        
-        _logger.LogInformation("Exchanging YouTube code with redirect_uri: {RedirectUri}", redirectUri);
+        var redirectUri = $"{Request.Scheme}://{Request.Host}/api/setup/youtube/callback";
         
         try
         {
