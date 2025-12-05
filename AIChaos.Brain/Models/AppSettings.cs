@@ -62,12 +62,16 @@ public class SafetySettings
 public class GeneralSettings
 {
     /// <summary>
-    /// When enabled, the system runs in single-user mode where:
+    /// When enabled, the system runs in stream mode where:
+    /// - Login is required for regular users
+    /// - Credits are needed for submissions
+    /// - Full authentication and credit system is active
+    /// When disabled (default), runs in single-user mode where:
     /// - No login is required for regular users
     /// - No credits are needed (unlimited submissions)
     /// - Admin login is still required for dashboard access
     /// </summary>
-    public bool SingleUserMode { get; set; } = true;
+    public bool StreamMode { get; set; } = false;
 }
 
 public class AdminSettings

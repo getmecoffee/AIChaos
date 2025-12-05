@@ -12,8 +12,8 @@
     </SubtitleContent>
 </Header>
 
-@* Show AccountBar if logged in user (not anonymous) OR not in single user mode *@
-@if (!SettingsService.Settings.General.SingleUserMode || (currentAccount != null && currentAccount.Id != AccountService.ANONYMOUS_USER_ID))
+@* Show AccountBar if logged in user (not anonymous) OR in stream mode *@
+@if (SettingsService.Settings.General.StreamMode || (currentAccount != null && currentAccount.Id != AccountService.ANONYMOUS_USER_ID))
 {
     <AccountBar CurrentAccount="@currentAccount" OnAccountChanged="@LoadAccount" />
 }
@@ -60,8 +60,8 @@
                 }
             }
 
-            // If no session and in single user mode, use the anonymous account
-            if (currentAccount == null && SettingsService.Settings.General.SingleUserMode)
+            // If no session and NOT in stream mode (i.e., in single user mode), use the anonymous account
+            if (currentAccount == null && !SettingsService.Settings.General.StreamMode)
             {
                 currentAccount = AccountService.GetOrCreateAnonymousAccount();
             }
@@ -71,8 +71,8 @@
             // Log error but don't throw - this prevents circuit crashes
             Console.WriteLine($"Error loading account: {ex.Message}");
             
-            // Fallback to anonymous account in single user mode
-            if (SettingsService.Settings.General.SingleUserMode)
+            // Fallback to anonymous account if NOT in stream mode (i.e., in single user mode)
+            if (!SettingsService.Settings.General.StreamMode)
             {
                 currentAccount = AccountService.GetOrCreateAnonymousAccount();
             }

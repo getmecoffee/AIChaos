@@ -126,11 +126,11 @@ public class SettingsService
     /// <summary>
     /// Updates General settings.
     /// </summary>
-    public void UpdateGeneralSettings(bool singleUserMode)
+    public void UpdateGeneralSettings(bool streamMode)
     {
         lock (_lock)
         {
-            _settings.General.SingleUserMode = singleUserMode;
+            _settings.General.StreamMode = streamMode;
             SaveSettings();
         }
     }
