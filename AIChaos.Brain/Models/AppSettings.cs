@@ -12,6 +12,7 @@ public class AppSettings
     public AdminSettings Admin { get; set; } = new();
     public TunnelSettings Tunnel { get; set; } = new();
     public TestClientSettings TestClient { get; set; } = new();
+    public GeneralSettings General { get; set; } = new();
 }
 
 public class OpenRouterSettings
@@ -56,6 +57,17 @@ public class SafetySettings
     public List<string> AllowedDomains { get; set; } = new() { "i.imgur.com", "imgur.com" };
     public List<string> Moderators { get; set; } = new();
     public bool PrivateDiscordMode { get; set; } = false;
+}
+
+public class GeneralSettings
+{
+    /// <summary>
+    /// When enabled, the system runs in single-user mode where:
+    /// - No login is required for regular users
+    /// - No credits are needed (unlimited submissions)
+    /// - Admin login is still required for dashboard access
+    /// </summary>
+    public bool SingleUserMode { get; set; } = true;
 }
 
 public class AdminSettings

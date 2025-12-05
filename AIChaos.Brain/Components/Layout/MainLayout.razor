@@ -1,5 +1,6 @@
 @inherits LayoutComponentBase
 @inject AccountService AccountService
+@inject SettingsService SettingsService
 @inject IJSRuntime JS
 
 <Header>
@@ -11,7 +12,11 @@
     </SubtitleContent>
 </Header>
 
-<AccountBar CurrentAccount="@currentAccount" OnAccountChanged="@LoadAccount" />
+@* Only show AccountBar if not in single user mode *@
+@if (!SettingsService.Settings.General.SingleUserMode)
+{
+    <AccountBar CurrentAccount="@currentAccount" OnAccountChanged="@LoadAccount" />
+}
 
 <NavMenu />
 
@@ -42,16 +47,24 @@
     {
         try
         {
-            // Get session token from localStorage (secure approach)
-            var sessionToken = await JS.InvokeAsync<string>("localStorage.getItem", "sessionToken");
-            if (!string.IsNullOrEmpty(sessionToken))
+            // If in single user mode, use the anonymous account
+            if (SettingsService.Settings.General.SingleUserMode)
             {
-                // Validate session token with AccountService
-                currentAccount = AccountService.GetAccountBySession(sessionToken);
-                if (currentAccount == null)
+                currentAccount = AccountService.GetOrCreateAnonymousAccount();
+            }
+            else
+            {
+                // Get session token from localStorage (secure approach)
+                var sessionToken = await JS.InvokeAsync<string>("localStorage.getItem", "sessionToken");
+                if (!string.IsNullOrEmpty(sessionToken))
                 {
-                    // Session expired or invalid, clear localStorage
-                    await JS.InvokeVoidAsync("localStorage.removeItem", "sessionToken");
+                    // Validate session token with AccountService
+                    currentAccount = AccountService.GetAccountBySession(sessionToken);
+                    if (currentAccount == null)
+                    {
+                        // Session expired or invalid, clear localStorage
+                        await JS.InvokeVoidAsync("localStorage.removeItem", "sessionToken");
+                    }
                 }
             }
         }
@@ -59,7 +72,16 @@
         {
             // Log error but don't throw - this prevents circuit crashes
             Console.WriteLine($"Error loading account: {ex.Message}");
-            currentAccount = null;
+            
+            // Fallback to anonymous account in single user mode
+            if (SettingsService.Settings.General.SingleUserMode)
+            {
+                currentAccount = AccountService.GetOrCreateAnonymousAccount();
+            }
+            else
+            {
+                currentAccount = null;
+            }
         }
 
         await InvokeAsync(StateHasChanged);

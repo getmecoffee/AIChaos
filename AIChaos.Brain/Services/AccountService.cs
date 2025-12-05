@@ -24,6 +24,7 @@ public class AccountService
     private const int DEFAULT_RATE_LIMIT_SECONDS = 20;
     private const int VERIFICATION_CODE_EXPIRY_MINUTES = 30;
     private const int SESSION_EXPIRY_DAYS = 30;
+    private const string ANONYMOUS_USER_ID = "anonymous-default-user";
 
     /// <summary>
     /// Event fired when a YouTube channel is successfully linked to an account.
@@ -38,6 +39,36 @@ public class AccountService
         _pendingCreditsPath = Path.Combine(AppContext.BaseDirectory, "pending_credits.json");
         LoadAccounts();
         LoadPendingCredits();
+    }
+
+    /// <summary>
+    /// Gets or creates the default anonymous account for single-user mode.
+    /// </summary>
+    public Account GetOrCreateAnonymousAccount()
+    {
+        if (_accounts.TryGetValue(ANONYMOUS_USER_ID, out var account))
+        {
+            return account;
+        }
+
+        // Create the anonymous account
+        account = new Account
+        {
+            Id = ANONYMOUS_USER_ID,
+            Username = "anonymous",
+            DisplayName = "Anonymous User",
+            CreditBalance = decimal.MaxValue, // Unlimited credits
+            CreatedAt = DateTime.UtcNow,
+            Role = UserRole.User
+        };
+
+        _accounts[ANONYMOUS_USER_ID] = account;
+        _usernameIndex["anonymous"] = ANONYMOUS_USER_ID;
+        SaveAccounts();
+
+        _logger.LogInformation("[ACCOUNT] Created anonymous account for single-user mode");
+
+        return account;
     }
 
     /// <summary>
@@ -664,7 +695,8 @@ public class AccountService
         Action<string, string, string, string, string?, int> addPendingImage,
         Func<string, string, string, string, string, string?, string?, string?, CommandStatus, bool, CommandEntry> addCommandWithStatus,
         bool isPrivateDiscordMode,
-        bool isTestClientModeEnabled)
+        bool isTestClientModeEnabled,
+        bool isSingleUserMode = false)
     {
         if (!_accounts.TryGetValue(accountId, out var account))
         {
@@ -676,17 +708,21 @@ public class AccountService
             return (false, "Prompt required", null, account.CreditBalance);
         }
 
-        // Check rate limit
-        var (allowed, waitSeconds) = CheckRateLimit(accountId);
-        if (!allowed)
+        // Skip rate limit check in single user mode
+        if (!isSingleUserMode)
         {
-            return (false, $"Please wait {waitSeconds:F0} seconds before submitting another command.", null, account.CreditBalance);
-        }
+            // Check rate limit
+            var (allowed, waitSeconds) = CheckRateLimit(accountId);
+            if (!allowed)
+            {
+                return (false, $"Please wait {waitSeconds:F0} seconds before submitting another command.", null, account.CreditBalance);
+            }
 
-        // Check credits
-        if (account.CreditBalance < Constants.CommandCost)
-        {
-            return (false, $"Insufficient credits. You have ${account.CreditBalance:F2}, but need ${Constants.CommandCost:F2}", null, account.CreditBalance);
+            // Check credits
+            if (account.CreditBalance < Constants.CommandCost)
+            {
+                return (false, $"Insufficient credits. You have ${account.CreditBalance:F2}, but need ${Constants.CommandCost:F2}", null, account.CreditBalance);
+            }
         }
 
         // Check for images in the prompt - queue for moderation if found (skip if Private Discord Mode)
@@ -695,15 +731,21 @@ public class AccountService
             _logger.LogInformation("[SUBMIT] User {Username} submitting command with images. Balance before: ${Balance}", 
                 account.Username, account.CreditBalance);
             
-            // Deduct credits NOW (before moderation)
-            if (!DeductCredits(accountId, Constants.CommandCost))
+            // Deduct credits NOW (before moderation) - skip in single user mode
+            if (!isSingleUserMode)
             {
-                _logger.LogError("[SUBMIT] Failed to deduct credits from {Username}", account.Username);
-                return (false, "Failed to deduct credits", null, account.CreditBalance);
+                if (!DeductCredits(accountId, Constants.CommandCost))
+                {
+                    _logger.LogError("[SUBMIT] Failed to deduct credits from {Username}", account.Username);
+                    return (false, "Failed to deduct credits", null, account.CreditBalance);
+                }
             }
             
             var updatedAccount = _accounts[accountId];
-            _logger.LogInformation("[SUBMIT] Credits deducted. Balance after: ${Balance}", updatedAccount.CreditBalance);
+            if (!isSingleUserMode)
+            {
+                _logger.LogInformation("[SUBMIT] Credits deducted. Balance after: ${Balance}", updatedAccount.CreditBalance);
+            }
             
             // Create placeholder command in history with PendingModeration status
             var placeholderCommand = addCommandWithStatus(
@@ -731,8 +773,12 @@ public class AccountService
             _logger.LogInformation("[MODERATION] Command #{CommandId} with {Count} image(s) queued for review from {Username}",
                 placeholderCommand.Id, imageUrls.Count, account.Username);
 
+            var moderationMessage = isSingleUserMode 
+                ? $"Your command contains {imageUrls.Count} image(s) that require moderator approval."
+                : $"Your command contains {imageUrls.Count} image(s) that require moderator approval. Credits have been deducted and will be refunded if denied.";
+
             return (true, 
-                $"Your command contains {imageUrls.Count} image(s) that require moderator approval. Credits have been deducted and will be refunded if denied.",
+                moderationMessage,
                 placeholderCommand.Id,
                 updatedAccount.CreditBalance);
         }
@@ -740,10 +786,13 @@ public class AccountService
         // Generate code
         var (executionCode, undoCode) = await codeGenerator(prompt);
 
-        // Deduct credits
-        if (!DeductCredits(accountId, Constants.CommandCost))
+        // Deduct credits - skip in single user mode
+        if (!isSingleUserMode)
         {
-            return (false, "Failed to deduct credits", null, account.CreditBalance);
+            if (!DeductCredits(accountId, Constants.CommandCost))
+            {
+                return (false, "Failed to deduct credits", null, account.CreditBalance);
+            }
         }
 
         // Add to command queue
@@ -775,7 +824,8 @@ public class AccountService
         Func<string, List<string>> extractImageUrls,
         Action<string, string, string, string, string?, int> addPendingImage,
         Func<string, string, string, string, string, string?, string?, string?, CommandStatus, bool, CommandEntry> addCommandWithStatus,
-        bool isPrivateDiscordMode)
+        bool isPrivateDiscordMode,
+        bool isSingleUserMode = false)
     {
         if (!_accounts.TryGetValue(accountId, out var account))
         {
@@ -787,17 +837,21 @@ public class AccountService
             return (false, "Prompt required", null, account.CreditBalance);
         }
 
-        // Check rate limit
-        var (allowed, waitSeconds) = CheckRateLimit(accountId);
-        if (!allowed)
+        // Skip rate limit and credit checks in single user mode
+        if (!isSingleUserMode)
         {
-            return (false, $"Please wait {waitSeconds:F0} seconds before submitting another command.", null, account.CreditBalance);
-        }
+            // Check rate limit
+            var (allowed, waitSeconds) = CheckRateLimit(accountId);
+            if (!allowed)
+            {
+                return (false, $"Please wait {waitSeconds:F0} seconds before submitting another command.", null, account.CreditBalance);
+            }
 
-        // Check credits
-        if (account.CreditBalance < Constants.CommandCost)
-        {
-            return (false, $"Insufficient credits. You have ${account.CreditBalance:F2}, but need ${Constants.CommandCost:F2}", null, account.CreditBalance);
+            // Check credits
+            if (account.CreditBalance < Constants.CommandCost)
+            {
+                return (false, $"Insufficient credits. You have ${account.CreditBalance:F2}, but need ${Constants.CommandCost:F2}", null, account.CreditBalance);
+            }
         }
 
         // Check for images in the prompt - queue for moderation if found (skip if Private Discord Mode)
@@ -806,15 +860,21 @@ public class AccountService
             _logger.LogInformation("[INTERACTIVE] User {Username} submitting interactive command with images. Balance before: ${Balance}", 
                 account.Username, account.CreditBalance);
             
-            // Deduct credits NOW (before moderation)
-            if (!DeductCredits(accountId, Constants.CommandCost))
+            // Deduct credits NOW (before moderation) - skip in single user mode
+            if (!isSingleUserMode)
             {
-                _logger.LogError("[INTERACTIVE] Failed to deduct credits from {Username}", account.Username);
-                return (false, "Failed to deduct credits", null, account.CreditBalance);
+                if (!DeductCredits(accountId, Constants.CommandCost))
+                {
+                    _logger.LogError("[INTERACTIVE] Failed to deduct credits from {Username}", account.Username);
+                    return (false, "Failed to deduct credits", null, account.CreditBalance);
+                }
             }
             
             var updatedAccount = _accounts[accountId];
-            _logger.LogInformation("[INTERACTIVE] Credits deducted. Balance after: ${Balance}", updatedAccount.CreditBalance);
+            if (!isSingleUserMode)
+            {
+                _logger.LogInformation("[INTERACTIVE] Credits deducted. Balance after: ${Balance}", updatedAccount.CreditBalance);
+            }
             
             // Create placeholder command in history with PendingModeration status
             var placeholderCommand = addCommandWithStatus(
@@ -842,21 +902,32 @@ public class AccountService
             _logger.LogInformation("[INTERACTIVE] Command #{CommandId} with {Count} image(s) queued for review from {Username}",
                 placeholderCommand.Id, imageUrls.Count, account.Username);
 
+            var moderationMessage = isSingleUserMode
+                ? $"Your interactive command contains {imageUrls.Count} image(s) that require moderator approval."
+                : $"Your interactive command contains {imageUrls.Count} image(s) that require moderator approval. Credits have been deducted and will be refunded if denied.";
+
             return (true, 
-                $"Your interactive command contains {imageUrls.Count} image(s) that require moderator approval. Credits have been deducted and will be refunded if denied.",
+                moderationMessage,
                 placeholderCommand.Id,
                 updatedAccount.CreditBalance);
         }
 
         // For interactive mode without images, just deduct credits and let the session proceed
         // The interactive session will handle code generation
-        if (!DeductCredits(accountId, Constants.CommandCost))
+        // Skip credit deduction in single user mode
+        if (!isSingleUserMode)
         {
-            return (false, "Failed to deduct credits", null, account.CreditBalance);
+            if (!DeductCredits(accountId, Constants.CommandCost))
+            {
+                return (false, "Failed to deduct credits", null, account.CreditBalance);
+            }
         }
 
         var finalAccount = _accounts[accountId];
-        _logger.LogInformation("[INTERACTIVE] Credits deducted for interactive session. Balance: ${Balance}", finalAccount.CreditBalance);
+        if (!isSingleUserMode)
+        {
+            _logger.LogInformation("[INTERACTIVE] Credits deducted for interactive session. Balance: ${Balance}", finalAccount.CreditBalance);
+        }
         
         return (true, "Credits deducted - starting interactive session", null, finalAccount.CreditBalance);
     }
