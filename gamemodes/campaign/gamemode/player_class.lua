@@ -6,6 +6,7 @@ local PLAYER = {}
 PLAYER.DisplayName			= "Campaign Player"
 PLAYER.WalkSpeed			= 190
 PLAYER.RunSpeed				= 320 
+PLAYER.DropWeaponOnDie		= false
 
 function PLAYER:Spawn()
 	BaseClass.Spawn( self )

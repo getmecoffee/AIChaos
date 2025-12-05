@@ -30,6 +30,49 @@ function GM:ShouldDropWeapon( ply, wep )
 	return false
 end
 
+-- Force it with a hook just in case
+hook.Add( "ShouldDropWeapon", "CampaignNoDrop", function( ply, wep )
+	return false
+end )
+
+-- Save weapons and ammo on death
+function GM:PlayerDeath( ply, inflictor, attacker )
+	ply.SavedWeapons = {}
+	for _, wep in ipairs( ply:GetWeapons() ) do
+		ply.SavedWeapons[wep:GetClass()] = {
+			clip1 = wep:Clip1(),
+			clip2 = wep:Clip2()
+		}
+	end
+	
+	ply.SavedAmmo = ply:GetAmmo()
+	
+	self.BaseClass:PlayerDeath( ply, inflictor, attacker )
+end
+
+-- Restore weapons on spawn
+function GM:PlayerLoadout( ply )
+	if ply.SavedWeapons then
+		for class, data in pairs( ply.SavedWeapons ) do
+			local wep = ply:Give( class )
+			if IsValid(wep) then
+				wep:SetClip1( data.clip1 )
+				wep:SetClip2( data.clip2 )
+			end
+		end
+		
+		for id, count in pairs( ply.SavedAmmo ) do
+			ply:SetAmmo( count, id )
+		end
+		
+		ply.SavedWeapons = nil
+		ply.SavedAmmo = nil
+		return true
+	end
+	
+	return true
+end
+
 -- Save velocity on level change (server shutdown/map change)
 function GM:ShutDown()
 	for _, ply in ipairs( player.GetAll() ) do
