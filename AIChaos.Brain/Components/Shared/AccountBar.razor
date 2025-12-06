@@ -8,7 +8,9 @@
 
 @if (CurrentAccount == null)
 {
-    <button @onclick=LoginButtonClicked style="padding: 8px 16px;">🔓 Login / Register</button>
+    <div class="user-profile">
+        <button @onclick=LoginButtonClicked style="padding: 8px 16px;">🔓 Login / Register</button>
+    </div>
 }
 else
 {
