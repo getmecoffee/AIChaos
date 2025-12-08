@@ -273,7 +273,24 @@ public class AiCodeGeneratorService
                 var parts = code.Split("---UNDO---");
                 var executionCode = parts[0].Trim();
                 var undoCode = parts.Length > 1 ? parts[1].Trim() : "print(\"No undo code provided\")";
+                
+                // Validate the generated code for dangerous patterns
+                if (ContainsDangerousPatterns(executionCode))
+                {
+                    _logger.LogWarning("AI generated code containing dangerous patterns (changelevel/map change). Rejecting.");
+                    return ("print(\"[BLOCKED] This command would change the map, which is not allowed.\")", 
+                            "print(\"No undo needed - command was blocked\")");
+                }
+                
                 return (executionCode, undoCode);
+            }
+
+            // Single code block without undo separator
+            if (ContainsDangerousPatterns(code))
+            {
+                _logger.LogWarning("AI generated code containing dangerous patterns (changelevel/map change). Rejecting.");
+                return ("print(\"[BLOCKED] This command would change the map, which is not allowed.\")", 
+                        "print(\"No undo needed - command was blocked\")");
             }
 
             return (code, "print(\"Undo not available for this command\")");
@@ -283,6 +300,22 @@ public class AiCodeGeneratorService
             _logger.LogError(ex, "Failed to generate code");
             return ("print(\"AI Generation Failed\")", "print(\"Undo not available\")");
         }
+    }
+
+    /// <summary>
+    /// Checks if code contains dangerous patterns that could break the game.
+    /// </summary>
+    private static bool ContainsDangerousPatterns(string code)
+    {
+        var dangerousPatterns = new[]
+        {
+            "changelevel",
+            @"RunConsoleCommand.*[""']map[""']",
+            @"game\.ConsoleCommand.*map"
+        };
+
+        return dangerousPatterns.Any(pattern =>
+            System.Text.RegularExpressions.Regex.IsMatch(code, pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase));
     }
 
     /// <summary>
