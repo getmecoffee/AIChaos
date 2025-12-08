@@ -705,10 +705,11 @@ public class AccountService
     public async Task<(bool Success, string Message, int? CommandId, decimal NewBalance)> SubmitChaosCommandAsync(
         string accountId,
         string prompt,
-        Func<string, Task<(string ExecutionCode, string UndoCode)>> codeGenerator,
+        Func<string, Task<(string ExecutionCode, string UndoCode, bool NeedsModeration, string? ModerationReason)>> codeGenerator,
         Func<string, bool> needsModeration,
         Func<string, List<string>> extractImageUrls,
         Action<string, string, string, string, string?, int> addPendingImage,
+        Action<string, string, string, string, string, string, string?, int?> addPendingCode,
         Func<string, string, string, string, string, string?, string?, string?, CommandStatus, bool, CommandEntry> addCommandWithStatus,
         bool isPrivateDiscordMode,
         bool isTestClientModeEnabled,
@@ -769,7 +770,7 @@ public class AccountService
                 account.DisplayName,
                 null, // Image URL will be added when approved
                 accountId,
-                "? Waiting for image moderation approval...",
+                "⏳ Waiting for image moderation approval...",
                 CommandStatus.PendingModeration,
                 false); // Don't queue yet
             
@@ -797,7 +798,58 @@ public class AccountService
         }
 
         // Generate code
-        var (executionCode, undoCode) = await codeGenerator(prompt);
+        var (executionCode, undoCode, codeNeedsModeration, moderationReason) = await codeGenerator(prompt);
+
+        // Check if the generated code needs moderation (URLs, external requests, etc.)
+        if (!isPrivateDiscordMode && codeNeedsModeration)
+        {
+            _logger.LogInformation("[SUBMIT] User {Username} submitting command with filtered code. Reason: {Reason}", 
+                account.Username, moderationReason);
+            
+            // Deduct credits NOW (before moderation) - skip in single user mode
+            if (!isSingleUserMode && !DeductCredits(accountId, Constants.CommandCost))
+            {
+                _logger.LogError("[SUBMIT] Failed to deduct credits from {Username}", account.Username);
+                return (false, "Failed to deduct credits", null, account.CreditBalance);
+            }
+            
+            var updatedAccount = _accounts[accountId];
+            if (!isSingleUserMode)
+            {
+                _logger.LogInformation("[SUBMIT] Credits deducted for code moderation. Balance after: ${Balance}", updatedAccount.CreditBalance);
+            }
+            
+            // Create placeholder command in history with PendingModeration status
+            var placeholderCommand = addCommandWithStatus(
+                prompt,
+                executionCode,
+                undoCode,
+                "web",
+                account.DisplayName,
+                null,
+                accountId,
+                $"⚠️ Code contains filtered content: {moderationReason}. Waiting for moderator approval...",
+                CommandStatus.PendingModeration,
+                false); // Don't queue yet
+            
+            _logger.LogInformation("[CODE MODERATION] Created placeholder command #{CommandId} with status {Status}", 
+                placeholderCommand.Id, placeholderCommand.Status);
+            
+            // Add to code moderation queue
+            addPendingCode(prompt, executionCode, undoCode, moderationReason, "web", account.DisplayName, accountId, placeholderCommand.Id);
+            
+            _logger.LogInformation("[CODE MODERATION] Command #{CommandId} queued for review from {Username} (Reason: {Reason})",
+                placeholderCommand.Id, account.Username, moderationReason);
+
+            var codeModerationMessage = isSingleUserMode 
+                ? $"Your code contains filtered content ({moderationReason}) and requires moderator approval."
+                : $"Your code contains filtered content ({moderationReason}) and requires moderator approval. Credits have been deducted and will be refunded if denied.";
+
+            return (true, 
+                codeModerationMessage,
+                placeholderCommand.Id,
+                updatedAccount.CreditBalance);
+        }
 
         // Deduct credits - skip in single user mode
         if (!isSingleUserMode && !DeductCredits(accountId, Constants.CommandCost))

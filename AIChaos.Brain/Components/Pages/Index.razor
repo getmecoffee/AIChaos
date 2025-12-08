@@ -4,6 +4,7 @@
 @inject CommandQueueService CommandQueue
 @inject AiCodeGeneratorService CodeGenerator
 @inject ImageModerationService ModerationService
+@inject CodeModerationService CodeModerationService
 @inject SettingsService SettingsService
 @inject TestClientService TestClientService
 @inject RefundService RefundService
@@ -403,15 +404,13 @@ else
             var (success, message, commandId, newBalance) = await AccountService.SubmitChaosCommandAsync(
                 currentAccount.Id,
                 promptInput,
-                codeGenerator: async (prompt) =>
-                {
-                    var (exec, undo, _, _) = await CodeGenerator.GenerateCodeAsync(prompt);
-                    return (exec, undo);
-                },
+                codeGenerator: async (prompt) => await CodeGenerator.GenerateCodeAsync(prompt),
                 needsModeration: ModerationService.NeedsModeration,
                 extractImageUrls: ModerationService.ExtractImageUrls,
                 addPendingImage: (url, prompt, source, author, userId, cmdId) => 
                     ModerationService.AddPendingImage(url, prompt, source, author, userId, cmdId),
+                addPendingCode: (prompt, execCode, undoCode, reason, source, author, userId, cmdId) =>
+                    CodeModerationService.AddPendingCode(prompt, execCode, undoCode, reason, source, author, userId, cmdId),
                 addCommandWithStatus: (prompt, execCode, undoCode, source, author, imgCtx, userId, aiResp, status, queue) =>
                     CommandQueue.AddCommandWithStatus(prompt, execCode, undoCode, source, author, imgCtx, userId, aiResp, status, queue),
                 isPrivateDiscordMode: SettingsService.Settings.Safety.PrivateDiscordMode,

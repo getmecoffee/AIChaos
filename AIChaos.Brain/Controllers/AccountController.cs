@@ -16,6 +16,7 @@ public class AccountController : ControllerBase
     private readonly AiCodeGeneratorService _codeGenerator;
     private readonly TestClientService _testClientService;
     private readonly ImageModerationService _moderationService;
+    private readonly CodeModerationService _codeModerationService;
     private readonly SettingsService _settingsService;
     private readonly ILogger<AccountController> _logger;
 
@@ -25,6 +26,7 @@ public class AccountController : ControllerBase
         AiCodeGeneratorService codeGenerator,
         TestClientService testClientService,
         ImageModerationService moderationService,
+        CodeModerationService codeModerationService,
         SettingsService settingsService,
         ILogger<AccountController> logger)
     {
@@ -33,6 +35,7 @@ public class AccountController : ControllerBase
         _codeGenerator = codeGenerator;
         _testClientService = testClientService;
         _moderationService = moderationService;
+        _codeModerationService = codeModerationService;
         _settingsService = settingsService;
         _logger = logger;
     }
@@ -284,15 +287,13 @@ public class AccountController : ControllerBase
             var (success, message, commandId, newBalance) = await _accountService.SubmitChaosCommandAsync(
                 account.Id,
                 request.Prompt,
-                codeGenerator: async (prompt) =>
-                {
-                    var (exec, undo, _, _) = await _codeGenerator.GenerateCodeAsync(prompt);
-                    return (exec, undo);
-                },
+                codeGenerator: async (prompt) => await _codeGenerator.GenerateCodeAsync(prompt),
                 needsModeration: _moderationService.NeedsModeration,
                 extractImageUrls: _moderationService.ExtractImageUrls,
                 addPendingImage: (url, prompt, source, author, userId, cmdId) => 
                     _moderationService.AddPendingImage(url, prompt, source, author, userId, cmdId),
+                addPendingCode: (prompt, execCode, undoCode, reason, source, author, userId, cmdId) =>
+                    _codeModerationService.AddPendingCode(prompt, execCode, undoCode, reason, source, author, userId, cmdId),
                 addCommandWithStatus: (prompt, execCode, undoCode, source, author, imgCtx, userId, aiResp, status, queue) =>
                     _commandQueue.AddCommandWithStatus(prompt, execCode, undoCode, source, author, imgCtx, userId, aiResp, status, queue),
                 isPrivateDiscordMode: _settingsService.Settings.Safety.PrivateDiscordMode,
