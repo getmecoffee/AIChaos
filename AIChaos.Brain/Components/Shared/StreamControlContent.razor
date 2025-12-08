@@ -8,6 +8,7 @@
 @inject QueueSlotService QueueSlots
 @inject SettingsService SettingsService
 @inject YouTubeService YouTubeService
+@inject AiCodeGeneratorService CodeGenerator
 @inject NavigationManager Navigation
 @inject HttpClient Http
 @inject IJSRuntime JS
@@ -974,28 +975,51 @@
             if (command == null)
             {
                 Console.WriteLine($"[FORCE UNDO] Command #{commandId} not found");
+                globalMessage = "Command not found";
+                globalMessageType = "error";
+                StateHasChanged();
                 return;
             }
 
-            Console.WriteLine($"[FORCE UNDO] Force-queuing undo code for command #{commandId}: {command.UserPrompt}");
+            Console.WriteLine($"[FORCE UNDO] Generating AI-powered comprehensive undo for command #{commandId}: {command.UserPrompt}");
+            globalMessage = "🔧 Generating comprehensive undo code...";
+            globalMessageType = "info";
+            StateHasChanged();
 
-            // We need to inject AiCodeGeneratorService
-            // For now, just queue the undo code if it exists
-            if (!string.IsNullOrEmpty(command.UndoCode))
+            // Use the AI to generate a comprehensive force undo
+            var forceUndoCode = await CodeGenerator.GenerateForceUndoAsync(command);
+
+            if (!string.IsNullOrEmpty(forceUndoCode))
             {
-                CommandQueue.QueueCode(command.UndoCode);
-                Console.WriteLine($"[FORCE UNDO] Undo queued for command #{commandId}");
+                // Queue the AI-generated force undo code
+                CommandQueue.QueueCode(forceUndoCode);
+                Console.WriteLine($"[FORCE UNDO] AI-generated comprehensive undo queued for command #{commandId}");
+                globalMessage = "✓ Comprehensive undo code generated and queued";
+                globalMessageType = "success";
                 await LoadHistory();
             }
             else
             {
-                Console.WriteLine($"[FORCE UNDO] No undo code available for command #{commandId}");
+                Console.WriteLine($"[FORCE UNDO] Failed to generate undo code for command #{commandId}");
+                globalMessage = "✗ Failed to generate undo code";
+                globalMessageType = "error";
             }
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Force undo failed: {ex.Message}");
+            globalMessage = $"Force undo error: {ex.Message}";
+            globalMessageType = "error";
         }
+        
+        StateHasChanged();
+        
+        // Clear message after 5 seconds
+        _ = Task.Delay(5000).ContinueWith(_ => InvokeAsync(() =>
+        {
+            globalMessage = "";
+            StateHasChanged();
+        }));
     }
 
     private bool showSavePayloadModal = false;

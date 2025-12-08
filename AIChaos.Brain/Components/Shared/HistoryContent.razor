@@ -355,17 +355,17 @@
                 return;
             }
 
-            Console.WriteLine($"[FORCE UNDO] Generating AI-powered undo for command #{commandId}: {command.UserPrompt}");
+            Console.WriteLine($"[FORCE UNDO] Generating AI-powered comprehensive undo for command #{commandId}: {command.UserPrompt}");
 
-            // Generate fresh undo code using AI based on the original prompt
-            var undoPrompt = $"Undo the following action: {command.UserPrompt}";
-            var (undoCode, _) = await CodeGenerator.GenerateCodeAsync(undoPrompt);
+            // Use the AI to generate a comprehensive force undo based on the original command
+            var forceUndoCode = await CodeGenerator.GenerateForceUndoAsync(command);
 
-            if (!string.IsNullOrEmpty(undoCode))
+            if (!string.IsNullOrEmpty(forceUndoCode))
             {
-                // Queue the auto-generated undo code directly
-                CommandQueue.QueueCode(undoCode);
-                Console.WriteLine($"[FORCE UNDO] Auto-generated undo queued for command #{commandId}");
+                // Queue the AI-generated force undo code
+                CommandQueue.QueueCode(forceUndoCode);
+                Console.WriteLine($"[FORCE UNDO] AI-generated comprehensive undo queued for command #{commandId}");
+                LoadHistory();
             }
             else
             {
