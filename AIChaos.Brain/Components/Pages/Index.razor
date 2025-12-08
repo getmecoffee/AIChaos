@@ -5,6 +5,7 @@
 @inject AiCodeGeneratorService CodeGenerator
 @inject ImageModerationService ModerationService
 @inject CodeModerationService CodeModerationService
+@inject AgenticGameService AgenticService
 @inject SettingsService SettingsService
 @inject TestClientService TestClientService
 @inject RefundService RefundService
@@ -482,37 +483,56 @@ else
                 return;
             }
             
-            // Otherwise, start the interactive session
-            var response = await Http.PostAsJsonAsync(
-                "/trigger/interactive",
-                new { 
-                    Prompt = promptInput,
-                    Source = "web",
-                    Author = currentAccount!.DisplayName,
-                    UserId = currentAccount!.Id,
-                    MaxIterations = 5
-                });
-            
-            var data = await response.Content.ReadFromJsonAsync<InteractiveSessionResponse>();
-            
-            if (data != null && data.Status != "error")
+            // Start the interactive session directly using AgenticService
+            var session = await AgenticService.CreateSessionAsync(new AgentSessionRequest
             {
-                activeInteractiveSession = data;
+                Prompt = promptInput,
+                Source = "web",
+                Author = currentAccount!.DisplayName,
+                UserId = currentAccount!.Id,
+                MaxIterations = 5,
+                UseTestClient = false
+            });
+            
+            if (session != null)
+            {
+                // Map AgentSession to InteractiveSessionResponse for UI
+                activeInteractiveSession = new InteractiveSessionResponse
+                {
+                    Status = session.IsComplete ? (session.WasSuccessful ? "complete" : "failed") : "in_progress",
+                    SessionId = session.Id,
+                    Iteration = session.CurrentIteration,
+                    CurrentPhase = session.CurrentPhase.ToString(),
+                    IsComplete = session.IsComplete,
+                    Steps = session.Steps.Select(s => new InteractionStep
+                    {
+                        StepNumber = s.StepNumber,
+                        Phase = s.Phase,
+                        Code = s.Code,
+                        Success = s.Success,
+                        Error = s.Error,
+                        ResultData = s.ResultData,
+                        AiThinking = s.AiThinking,
+                        Timestamp = s.Timestamp
+                    }).ToList()
+                };
+                
                 promptInput = "";
                 ShowStatus("🔄 Interactive session started", "info");
                 
                 // Start polling for updates
-                StartInteractivePolling(data.SessionId);
+                StartInteractivePolling(session.Id);
             }
             else
             {
-                ShowStatus(data?.Message ?? "Failed to start interactive session", "error");
+                ShowStatus("Failed to start interactive session", "error");
                 isSubmitting = false;
             }
         }
         catch (Exception ex)
         {
             ShowStatus($"Error: {ex.Message}", "error");
+            Console.WriteLine($"Interactive mode error: {ex}");
             isSubmitting = false;
         }
     }
@@ -525,21 +545,41 @@ else
             {
                 try
                 {
-                    var response = await Http.GetAsync($"/api/interactive/{sessionId}");
-                    var data = await response.Content.ReadFromJsonAsync<InteractiveSessionResponse>();
+                    // Get session directly from AgenticService instead of HTTP call
+                    var session = AgenticService.GetSession(sessionId);
                     
-                    if (data != null)
+                    if (session != null)
                     {
-                        activeInteractiveSession = data;
+                        // Map to UI model
+                        activeInteractiveSession = new InteractiveSessionResponse
+                        {
+                            Status = session.IsComplete ? (session.WasSuccessful ? "complete" : "failed") : "in_progress",
+                            SessionId = session.Id,
+                            Iteration = session.CurrentIteration,
+                            CurrentPhase = session.CurrentPhase.ToString(),
+                            IsComplete = session.IsComplete,
+                            Steps = session.Steps.Select(s => new InteractionStep
+                            {
+                                StepNumber = s.StepNumber,
+                                Phase = s.Phase,
+                                Code = s.Code,
+                                Success = s.Success,
+                                Error = s.Error,
+                                ResultData = s.ResultData,
+                                AiThinking = s.AiThinking,
+                                Timestamp = s.Timestamp
+                            }).ToList()
+                        };
+                        
                         StateHasChanged();
                         
-                        if (data.IsComplete)
+                        if (session.IsComplete)
                         {
                             // Session finished
                             StopInteractivePolling();
                             isSubmitting = false;
                             
-                            if (data.Status == "complete")
+                            if (session.WasSuccessful)
                             {
                                 ShowStatus("✓ Interactive session completed successfully!", "success");
                             }

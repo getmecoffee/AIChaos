@@ -42,6 +42,10 @@ public class AgenticGameService
         You will receive a request from a livestream chat and can optionally execute preparation code to gather information before generating your final code. 
         The chat is controlling the streamer's playthrough of Half-Life 2 via your generated scripts.
 
+        **CRITICAL: YOU MUST ALWAYS RESPOND WITH VALID JSON!**
+        Your response MUST be a valid JSON object. Do not include any text before or after the JSON.
+        Do not use markdown. Do not add explanations outside the JSON object.
+        
         **IMPORTANT: You can skip preparation and generate immediately!**
         If the request is simple or you already know how to do it, set `isComplete: true` and provide the code directly.
         Only use preparation phases when you genuinely need to discover something (find specific models, check entity state, etc.)
@@ -51,8 +55,8 @@ public class AgenticGameService
         2. **GENERATE** - Generate the main execution code (can be done immediately if no prep needed)
         3. **FIX** - If execution fails, analyze errors and fix the code
         
-        **RESPONSE FORMAT:**
-        You must respond with a JSON object in this exact format:
+        **RESPONSE FORMAT (REQUIRED):**
+        You MUST respond with ONLY this JSON object, nothing else:
         ```json
         {
             "phase": "prepare|generate|fix",
@@ -63,6 +67,14 @@ public class AgenticGameService
             "searchQuery": "optional: what you're searching for"
         }
         ```
+        
+        **JSON REQUIREMENTS:**
+        - phase: Must be one of "prepare", "generate", or "fix"
+        - thinking: Brief explanation of your reasoning (1-2 sentences)
+        - code: The Lua code to execute (required)
+        - undoCode: Undo code (only include if isComplete is true)
+        - isComplete: true if this is the final code, false if you need more iterations
+        - searchQuery: (optional) what you're searching for in preparation
         
         **WHEN TO SET isComplete: true (SKIP PREPARATION):**
         - Simple effects like gravity, speed, scale changes
@@ -89,6 +101,8 @@ public class AgenticGameService
         4. After getting preparation results, generate the main code with full context
         5. If the main code fails, analyze the error and generate fixed code
         6. Maximum iterations are limited - don't waste them on unnecessary preparation
+        
+        **REMEMBER: Your entire response must be valid JSON. Nothing before the opening {, nothing after the closing }.**
         
         {{AiCodeGeneratorService.GroundRules}}
         """;
@@ -613,6 +627,7 @@ public class AgenticGameService
             foreach (var step in session.Steps.TakeLast(3))
             {
                 userContent.AppendLine($"- Step {step.StepNumber} ({step.Phase}): {(step.Success == true ? "Success" : step.Success == false ? $"Failed: {step.Error}" : "Pending")}");
+
                 if (!string.IsNullOrEmpty(step.ResultData))
                 {
                     var truncated = step.ResultData.Length > 500 ? step.ResultData[..500] + "..." : step.ResultData;
@@ -717,34 +732,148 @@ public class AgenticGameService
     
     private AgentAiResponse? ParseAgentAiResponse(string content)
     {
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            _logger.LogWarning("[AGENT] AI returned empty content");
+            return null;
+        }
+        
         try
         {
-            var jsonContent = content;
-            if (content.Contains("```json"))
+            var jsonContent = content.Trim();
+            
+            // Extract JSON from markdown code blocks
+            if (jsonContent.Contains("```json"))
             {
-                var start = content.IndexOf("```json") + 7;
-                var end = content.IndexOf("```", start);
-                if (end > start) jsonContent = content[start..end].Trim();
+                var start = jsonContent.IndexOf("```json") + 7;
+                var end = jsonContent.IndexOf("```", start);
+                if (end > start)
+                {
+                    jsonContent = jsonContent[start..end].Trim();
+                }
             }
-            else if (content.Contains("```"))
+            else if (jsonContent.Contains("```"))
             {
-                var start = content.IndexOf("```") + 3;
-                var end = content.IndexOf("```", start);
-                if (end > start) jsonContent = content[start..end].Trim();
+                var start = jsonContent.IndexOf("```") + 3;
+                var end = jsonContent.IndexOf("```", start);
+                if (end > start)
+                {
+                    jsonContent = jsonContent[start..end].Trim();
+                }
             }
             
-            return JsonSerializer.Deserialize<AgentAiResponse>(jsonContent, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            // Try to find JSON object in the content
+            if (!jsonContent.TrimStart().StartsWith("{"))
+            {
+                var jsonStart = jsonContent.IndexOf('{');
+                if (jsonStart >= 0)
+                {
+                    jsonContent = jsonContent[jsonStart..];
+                    var jsonEnd = jsonContent.LastIndexOf('}');
+                    if (jsonEnd >= 0)
+                    {
+                        jsonContent = jsonContent[..(jsonEnd + 1)];
+                    }
+                }
+            }
+            
+            // Validate that we have JSON-like content
+            if (!jsonContent.TrimStart().StartsWith("{") || !jsonContent.TrimEnd().EndsWith("}"))
+            {
+                _logger.LogWarning("[AGENT] AI response doesn't contain valid JSON. Content: {Content}", 
+                    content.Length > 200 ? content[..200] + "..." : content);
+                
+                // Fallback: treat the entire response as code
+                return new AgentAiResponse
+                {
+                    Phase = "generate",
+                    Thinking = "Direct code generation (fallback)",
+                    Code = ExtractLuaCode(content),
+                    IsComplete = true
+                };
+            }
+            
+            var response = JsonSerializer.Deserialize<AgentAiResponse>(jsonContent, new JsonSerializerOptions 
+            { 
+                PropertyNameCaseInsensitive = true,
+                AllowTrailingCommas = true
+            });
+            
+            if (response == null)
+            {
+                _logger.LogWarning("[AGENT] Failed to deserialize AI response");
+                return new AgentAiResponse
+                {
+                    Phase = "generate",
+                    Thinking = "Direct code generation (deserialization failed)",
+                    Code = ExtractLuaCode(content),
+                    IsComplete = true
+                };
+            }
+            
+            // Validate the response has required fields
+            if (string.IsNullOrEmpty(response.Code) && !response.IsComplete)
+            {
+                _logger.LogWarning("[AGENT] AI response missing code field");
+                response.Code = ExtractLuaCode(content);
+                if (string.IsNullOrEmpty(response.Code))
+                {
+                    response.IsComplete = true; // Mark as complete if we can't extract code
+                }
+            }
+            
+            return response;
         }
-        catch
+        catch (JsonException ex)
         {
+            _logger.LogError(ex, "[AGENT] JSON parsing error. Content: {Content}", 
+                content.Length > 200 ? content[..200] + "..." : content);
+            
+            // Fallback: extract any Lua code we can find
             return new AgentAiResponse
             {
                 Phase = "generate",
-                Thinking = "Direct code generation",
-                Code = content.Replace("```lua", "").Replace("```", "").Trim(),
+                Thinking = "Direct code generation (JSON parse error)",
+                Code = ExtractLuaCode(content),
                 IsComplete = true
             };
         }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[AGENT] Error parsing AI response");
+            return null;
+        }
+    }
+    
+    /// <summary>
+    /// Extracts Lua code from AI response, removing markdown formatting.
+    /// </summary>
+    private string ExtractLuaCode(string content)
+    {
+        var code = content;
+        
+        // Remove ```lua``` blocks
+        if (code.Contains("```lua"))
+        {
+            var start = code.IndexOf("```lua") + 6;
+            var end = code.IndexOf("```", start);
+            if (end > start)
+            {
+                code = code[start..end].Trim();
+            }
+        }
+        else if (code.Contains("```"))
+        {
+            // Generic code block
+            var start = code.IndexOf("```") + 3;
+            var end = code.IndexOf("```", start);
+            if (end > start)
+            {
+                code = code[start..end].Trim();
+            }
+        }
+        
+        return code.Trim();
     }
     
     private string WrapCodeForDataCapture(string code)
