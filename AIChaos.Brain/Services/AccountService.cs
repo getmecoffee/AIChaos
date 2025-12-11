@@ -1115,11 +1115,12 @@ public class AccountService
             bool looksLikeGoogleId = channelId.All(char.IsDigit);
             bool looksLikeYouTubeChannelId = channelId.StartsWith("UC") && channelId.Length == 24;
             
-            if (looksLikeGoogleId || !looksLikeYouTubeChannelId)
+            // Flag as incorrect if it looks like a Google ID AND doesn't look like a YouTube Channel ID
+            if (looksLikeGoogleId && !looksLikeYouTubeChannelId)
             {
                 accountsWithIssues.Add(account);
-                _logger.LogInformation("[ACCOUNT] Account {Username} ({AccountId}) has incorrect YouTube ID: {ChannelId} (looks like Google ID: {IsGoogleId})",
-                    account.Username, account.Id, channelId, looksLikeGoogleId);
+                _logger.LogInformation("[ACCOUNT] Account {Username} ({AccountId}) has incorrect YouTube ID: {ChannelId} (looks like Google ID)",
+                    account.Username, account.Id, channelId);
             }
         }
         

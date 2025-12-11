@@ -40,6 +40,14 @@ public class AccountController : ControllerBase
         _settingsService = settingsService;
         _logger = logger;
     }
+    
+    /// <summary>
+    /// Gets the OAuth callback redirect URI for viewer YouTube linking.
+    /// </summary>
+    private string GetViewerOAuthRedirectUri()
+    {
+        return $"{Request.Scheme}://{Request.Host}{Request.PathBase}/api/account/link-youtube/oauth-callback";
+    }
 
     /// <summary>
     /// Generates a verification code to link a YouTube channel.
@@ -70,6 +78,44 @@ public class AccountController : ControllerBase
             status = "success",
             code,
             message = $"Send a Super Chat containing '{code}' to link your YouTube channel. Code expires in 30 minutes."
+        });
+    }
+    
+    /// <summary>
+    /// Unlinks the current user's YouTube channel.
+    /// </summary>
+    [HttpPost("link-youtube/unlink")]
+    public ActionResult UnlinkYouTube([FromHeader(Name = "X-Session-Token")] string? sessionToken)
+    {
+        if (string.IsNullOrEmpty(sessionToken))
+        {
+            return Unauthorized(new { status = "error", message = "Not logged in" });
+        }
+        
+        var account = _accountService.GetAccountBySession(sessionToken);
+        if (account == null)
+        {
+            return Unauthorized(new { status = "error", message = "Session expired" });
+        }
+        
+        if (string.IsNullOrEmpty(account.LinkedYouTubeChannelId))
+        {
+            return BadRequest(new { status = "error", message = "No YouTube channel linked" });
+        }
+        
+        var success = _accountService.UnlinkYouTubeChannel(account.Id);
+        
+        if (!success)
+        {
+            return BadRequest(new { status = "error", message = "Failed to unlink YouTube channel" });
+        }
+        
+        _logger.LogInformation("[ACCOUNT] User {Username} unlinked their YouTube channel", account.Username);
+        
+        return Ok(new 
+        { 
+            status = "success",
+            message = "YouTube channel unlinked successfully. You can link a different channel now."
         });
     }
 
@@ -180,12 +226,12 @@ public class AccountController : ControllerBase
         }
         
         // Build the OAuth URL with YouTube readonly scope
-        var redirectUri = $"{Request.Scheme}://{Request.Host}{Request.PathBase}/api/account/link-youtube/oauth-callback";
+        var redirectUri = GetViewerOAuthRedirectUri();
         var scopes = "https://www.googleapis.com/auth/youtube.readonly";
         var state = sessionToken; // Pass session token as state to link after callback
         
         var authUrl = $"https://accounts.google.com/o/oauth2/v2/auth" +
-            $"?client_id={settings.ClientId}" +
+            $"?client_id={System.Web.HttpUtility.UrlEncode(settings.ClientId)}" +
             $"&redirect_uri={System.Web.HttpUtility.UrlEncode(redirectUri)}" +
             $"&response_type=code" +
             $"&scope={System.Web.HttpUtility.UrlEncode(scopes)}" +
@@ -230,7 +276,7 @@ public class AccountController : ControllerBase
         }
         
         var settings = settingsService.Settings.YouTube;
-        var redirectUri = $"{Request.Scheme}://{Request.Host}{Request.PathBase}/api/account/link-youtube/oauth-callback";
+        var redirectUri = GetViewerOAuthRedirectUri();
         
         try
         {
